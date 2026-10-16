@@ -1,8 +1,12 @@
 .env
 __pycache__/
-*.pyc
+*.py[cod]
 .venv/
 .pytest_cache/
-data/*.db
+.streamlit/
+*.db
+*.sqlite
+*.sqlite3
 data/raw/*
 !data/raw/.gitkeep
+data/outbox/

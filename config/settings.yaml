@@ -1,10 +1,31 @@
-# Scraper / pipeline settings (config is separate from code)
-adapter: mock            # mock | live (live is intentionally NOT implemented: robots.txt disallows /search)
-timeouts: {connect_s: 5, read_s: 15}
-retries: {max_attempts: 3, base_delay_s: 1.0, max_delay_s: 30.0, jitter: true}
-rate_limit: {requests_per_second: 0.5}
-retry_after_budget_s: 60
+adapter: mock
+mock_generator: true        # synthetic per-keyword/per-hour pages (seeded); keywords in mock_fixtures use fixed fixtures
+max_pages: 2
+timeouts:
+  connect_seconds: 5
+  read_seconds: 15
+retries:
+  max_attempts: 3
+  base_delay_seconds: 0.25
+  max_delay_seconds: 5
+  jitter_fraction: 0.5      # delay is uniform in [50%, 100%] of the exponential value
+  retry_after_budget_seconds: 10
+rate_limit:
+  enabled: true
+  requests_per_second: 0.5  # one request every 2 s; 50 keywords x 2 pages = 100 requests ~ 3.3 min per hour
+  apply_to_mock: false      # the mock does no network I/O; set true to rehearse the live pacing
 grace_period_minutes: 15
 completeness_threshold: 0.98
-timezone: Asia/Kolkata
-alerts: {cooldown_minutes: 60}
+timezone: UTC
+alerts:
+  cooldown_minutes: 60
+  parser_error_threshold: 1
+  row_drop_fraction: 0.5    # alert when a run writes less than 50% of the rolling median
+  row_baseline_runs: 6
+  stale_sla_minutes: 120
+  dashboard_url: http://localhost:8501
+mock_fixtures:
+  men white sneakers: mixed_placements.html
+  women kurta set: messy_values.html
+  zxqvbn shirt: zero_results.html
+  asdfgh qwerty zzzz: zero_results.html

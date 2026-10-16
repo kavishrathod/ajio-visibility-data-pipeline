@@ -1,0 +1,11 @@
+{
+ "scheduled_hour": "2026-10-16T05:00:00Z",
+ "keyword": "women saree",
+ "page": 1,
+ "http_status": 200,
+ "fetched_at": "2026-10-16T05:00:12Z",
+ "is_mock": true,
+ "headers": {
+  "X-Data-Mode": "mock-generated"
+ }
+}
