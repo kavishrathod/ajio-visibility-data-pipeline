@@ -1,0 +1,8 @@
+{
+  "_mock": true,
+  "scenario": "I-3 mixed placement types",
+  "keyword": "men white sneakers",
+  "page": 1,
+  "http": {"status": 200, "headers": {}, "raise": null},
+  "body": "{\"_mock\":true,\"numberOfItems\":1200,\"grid\":{\"units\":[{\"kind\":\"SB\",\"name\":\"Puma Brand Banner\",\"url\":\"https://www.ajio.com/brand/puma\",\"campaign_id\":\"MOCK-CMP-001\"},{\"kind\":\"SP\",\"name\":\"Mock Sneaker A\",\"url\":\"https://www.ajio.com/mock-sneaker-a/p/900000001_white\",\"price\":\"₹1,299\",\"mrp\":\"₹2,599\",\"rating\":\"4.2\",\"rating_count\":\"1.2K\",\"tag\":\"Bestseller\",\"deal\":\"\"},{\"kind\":\"ORGANIC\",\"name\":\"Mock Sneaker B\",\"url\":\"https://www.ajio.com/mock-sneaker-b/p/900000002_white\",\"price\":\"Rs. 1499.00\",\"mrp\":null,\"rating\":\"3.9\",\"rating_count\":\"(1,234)\",\"tag\":\"\",\"deal\":\"Extra 10% off\"}]}}"
+}

@@ -1,0 +1,10 @@
+# Scraper / pipeline settings (config is separate from code)
+adapter: mock            # mock | live (live is intentionally NOT implemented: robots.txt disallows /search)
+timeouts: {connect_s: 5, read_s: 15}
+retries: {max_attempts: 3, base_delay_s: 1.0, max_delay_s: 30.0, jitter: true}
+rate_limit: {requests_per_second: 0.5}
+retry_after_budget_s: 60
+grace_period_minutes: 15
+completeness_threshold: 0.98
+timezone: Asia/Kolkata
+alerts: {cooldown_minutes: 60}
