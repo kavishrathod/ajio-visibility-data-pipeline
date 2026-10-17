@@ -185,6 +185,22 @@ class Database:
                         (platform, target_id, scheduled_hour),
                     )
 
+    def save_quarantine(self, records: Iterable[dict[str, Any]]) -> int:
+        """Store quarantined records. Idempotent within a run (INSERT OR IGNORE on the unique key)."""
+        rows = list(records)
+        if not rows:
+            return 0
+        with self.connect() as conn:
+            conn.executemany(
+                """INSERT OR IGNORE INTO quarantine_record
+                (run_id,platform,target_id,keyword,scheduled_hour,page_number,record_type,record_index,stage,
+                 reason_code,reason_detail,payload_json,raw_payload_ref,is_mock,created_at)
+                VALUES (:run_id,:platform,:target_id,:keyword,:scheduled_hour,:page_number,:record_type,:record_index,
+                 :stage,:reason_code,:reason_detail,:payload_json,:raw_payload_ref,:is_mock,:created_at)""",
+                rows,
+            )
+        return len(rows)
+
     def count_products(self, platform: str, target_id: int, scheduled_hour: str) -> int:
         with self.connect() as conn:
             row = conn.execute(

@@ -129,6 +129,34 @@ CREATE TABLE IF NOT EXISTS pipeline_lock (
 );
 
 -- ---------------------------------------------------------------------------
+-- QUARANTINE: records (or whole pages) that were rejected on the way to Silver, kept with the
+-- reason and enough payload to diagnose them. Append-only per run: the same run never stores a
+-- record twice (UNIQUE key), and earlier attempts stay as history. gold_quarantine_summary below
+-- counts only the latest attempt per target and slot.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS quarantine_record (
+  quarantine_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id TEXT NOT NULL REFERENCES scrape_run(run_id),
+  platform TEXT NOT NULL,
+  target_id INTEGER NOT NULL REFERENCES scrape_target(target_id),
+  keyword TEXT NOT NULL,
+  scheduled_hour TEXT NOT NULL,
+  page_number INTEGER NOT NULL,
+  record_type TEXT NOT NULL CHECK (record_type IN ('card', 'unit', 'page')),
+  record_index INTEGER NOT NULL DEFAULT 0,      -- card position on the page / entry order in the target; 0 for a whole page
+  stage TEXT NOT NULL CHECK (stage IN ('parse', 'validate', 'dedupe')),
+  reason_code TEXT NOT NULL,
+  reason_detail TEXT,
+  payload_json TEXT,
+  raw_payload_ref TEXT,
+  is_mock INTEGER NOT NULL DEFAULT 1 CHECK (is_mock IN (0,1)),
+  created_at TEXT NOT NULL,
+  UNIQUE (run_id, target_id, page_number, record_type, record_index, reason_code)
+);
+CREATE INDEX IF NOT EXISTS ix_quarantine_slot ON quarantine_record(platform, scheduled_hour, target_id);
+CREATE INDEX IF NOT EXISTS ix_quarantine_reason ON quarantine_record(reason_code);
+
+-- ---------------------------------------------------------------------------
 -- GOLD layer: read-only views over Silver (visibility_product) and the status
 -- ledger (target_hour_status). Views, not tables: they are always consistent
 -- with the data, rerunning an hour or a backfill needs no refresh job, and
@@ -194,3 +222,21 @@ SELECT
   ROUND(100.0 * SUM(status IN ('success', 'zero_result')) / COUNT(*), 1) AS completeness_pct
 FROM target_hour_status
 GROUP BY platform, scheduled_hour;
+
+-- Latest attempt only: a quarantine row counts when its run is the one that last wrote the
+-- target-hour status, so a rerun or reload of an hour never doubles the totals.
+DROP VIEW IF EXISTS gold_quarantine_summary;
+CREATE VIEW gold_quarantine_summary AS
+SELECT
+  q.platform,
+  q.scheduled_hour,
+  q.record_type,
+  q.stage,
+  q.reason_code,
+  COUNT(*)                    AS records,
+  COUNT(DISTINCT q.target_id) AS targets_affected
+FROM quarantine_record q
+JOIN target_hour_status s
+  ON s.platform = q.platform AND s.target_id = q.target_id
+ AND s.scheduled_hour = q.scheduled_hour AND s.last_run_id = q.run_id
+GROUP BY q.platform, q.scheduled_hour, q.record_type, q.stage, q.reason_code;

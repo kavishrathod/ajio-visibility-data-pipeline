@@ -11,6 +11,9 @@ flowchart TD
     FETCH --> RAW["BRONZE: raw HTML + .meta.json on disk<br/>data/raw/platform=/date=/hour=/run_id/<br/>written BEFORE any database write"]
     RAW --> PARSE["Parser / normaliser<br/>ok - zero_result - parse_failed - blocked"]
     PARSE --> VAL["Validate + dedupe (placement key)<br/>pagination-drift detection + ranks"]
+    PARSE -->|"unparseable card, failed or blocked page"| QUAR
+    VAL -->|"validation failure, duplicate placement"| QUAR["QUARANTINE: quarantine_record<br/>reason code + payload + raw page ref<br/>append-only per run"]
+    QUAR --> DASH
     VAL --> SILVER["SILVER: visibility_product (upsert)<br/>unique platform,target,scheduled_hour,absolute_rank"]
     VAL --> THS["target_hour_status<br/>running / success / zero_result / partial /<br/>parse_failed / blocked / failed"]
     THS --> GOLD["GOLD: completeness per target-hour<br/>missing after grace, thresholds, row-drop, stale"]
@@ -29,8 +32,9 @@ flowchart TD
 - **Raw layer (Bronze):** every response is written to disk with a metadata sidecar before the database is touched, partitioned `platform=/date=/hour=/<run_id>/`, where date and hour are the IST slot (10:00 IST slot -> `date=2026-10-16/hour=10`). Partitioning by hour matches how the data is queried, reloaded and expired; the run id keeps reruns from overwriting each other.
 - **Parsing** separates an explicit no-results marker from a missing grid, and detects blocked/challenge pages. HTTP status is checked first.
 - **Normalisation:** missing or ambiguous values stay NULL. Placement type is part of the dedupe key, so SP and Organic copies of one product are both kept.
+- **Quarantine:** rejected cards, placements and pages go to `quarantine_record` with a reason code, the payload and the raw page path (`docs/quarantine.md`). It is evidence, not a dependency: a failed write never changes a status, and `--reload-raw` rebuilds it.
 - **Silver:** `visibility_product`, unique on `(platform, target_id, scheduled_hour, absolute_rank)`; a complete parse replaces the slot, a partial one never deletes earlier good rows.
-- **Status / Gold:** completeness is measured from `target_hour_status`, not from product row counts, so a valid zero result is complete and a layout change is not.
+- **Status / Gold:** completeness is measured from `target_hour_status`, not from product row counts, so a valid zero result is complete and a layout change is not. Aggregates are SQL views (`gold_hour_summary`, `gold_keyword_hour`, `gold_product_placement`, `gold_quarantine_summary`; see `docs/gold_layer.md`).
 - **Locking:** one platform-wide lock row. A second run is recorded as `skipped_overlap`. A lock is cleared when its run is finished, or after 4 hours.
 - **Alerting:** incidents are persisted; email failure never loses state.
 

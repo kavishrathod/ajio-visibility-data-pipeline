@@ -38,8 +38,13 @@ All timestamps use ISO 8601 UTC strings ending in `Z` unless the value is explic
 - **`scrape_run`**: run-level lifecycle, trigger, scheduled hour, counts, adapter mode, errors, retry count.
 - **`raw_snapshot`**: fetched response metadata, checksum, local file path, status, response headers, mock flag.
 - **`target_hour_status`**: one status per platform/keyword/hour; `expected=1` means one slot was due and `observed=1` means it completed with `success` or a valid `zero_result`. `row_count` is the normalized row count; parse failures and incomplete reasons remain explicit.
+- **`quarantine_record`**: one row per rejected card, placement or page. Columns: `run_id`, `platform`, `target_id`, `keyword`, `scheduled_hour`, `page_number`, `record_type` (`card` / `unit` / `page`), `record_index` (card position on the page, or entry order within the target; 0 for a page), `stage` (`parse` / `validate` / `dedupe`), `reason_code`, `reason_detail`, `payload_json` (card attributes or the parsed unit), `raw_payload_ref` (the raw page it came from), `is_mock`, `created_at`. Unique on `(run_id, target_id, page_number, record_type, record_index, reason_code)`. Reason codes are listed in `docs/quarantine.md`.
 - **`alert_incident`**: aggregated alert per hour, send cooldown, resolution, recovery notification.
 - **`pipeline_lock`**: short-lived process lock that prevents overlapping runs.
+
+## Gold views
+
+`gold_hour_summary` (coverage and volume per hour), `gold_keyword_hour` (unit mix, paid share, price spread per keyword and hour), `gold_product_placement` (best organic rank versus best sponsored rank per product), `gold_quarantine_summary` (quarantined records by reason, latest attempt per target-hour). Definitions are in `sql/schema.sql` and explained in `docs/gold_layer.md`.
 
 ## Rank and dedup semantics
 
@@ -51,7 +56,7 @@ Ranks are assigned in observed top-to-bottom order after duplicate placements wi
 |---|---|---|
 | target-hour | `success` | At least one valid page parsed; all attempted pages ok. Complete. |
 | target-hour | `zero_result` | Page 1 had an explicit no-results marker. Complete. |
-| target-hour | `partial` | Some pages parsed, a later page failed or changed layout. Not complete. |
+| target-hour | `partial` | Page 1 parsed, a later page failed (parse failure, or fetch retries exhausted). Page-1 rows are kept. Not complete. |
 | target-hour | `parse_failed` | Grid missing/renamed or no card passed validation. No rows written. |
 | target-hour | `blocked` | HTTP 401/403, 429 beyond budget, or a challenge page. Not retried. |
 | target-hour | `failed` | Retries exhausted, unexpected error, or `load_failed` (database unavailable). |

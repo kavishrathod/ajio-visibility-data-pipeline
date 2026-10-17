@@ -60,6 +60,38 @@ def placement_key(unit: ProductUnit) -> tuple[str, str, str | None]:
     return (unit.product_type, _identity(unit), unit.campaign_id if unit.product_type in {"SP", "SB"} else None)
 
 
+def validate_entries(entries: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Validate and deduplicate page entries; return (accepted entries, rejections with reasons).
+
+    Same decisions as ``validate_units`` (validation errors first, then first-occurrence-wins placement
+    dedupe), but each rejection keeps the entry and a machine-readable reason so it can be quarantined.
+    A rejection is ``{"entry", "stage", "reason_code", "detail"}``; ``stage`` is ``validate`` or ``dedupe``.
+    """
+    accepted: list[dict] = []
+    rejected: list[dict] = []
+    kept_by_key: dict[tuple[str, str, str | None], dict] = {}
+    for entry in entries:
+        unit = entry["unit"]
+        errors = validate_unit(unit)
+        if errors:
+            for code in errors:
+                rejected.append({"entry": entry, "stage": "validate", "reason_code": code, "detail": f"failed validation rule {code}"})
+            continue
+        key = placement_key(unit)
+        kept = kept_by_key.get(key)
+        if kept is not None:
+            kept_page, this_page = int(kept["page_number"]), int(entry["page_number"])
+            code = "duplicate_placement" if kept_page == this_page else "cross_page_duplicate"
+            rejected.append({
+                "entry": entry, "stage": "dedupe", "reason_code": code,
+                "detail": f"same placement already kept from page {kept_page}; repeated on page {this_page}",
+            })
+            continue
+        kept_by_key[key] = entry
+        accepted.append(entry)
+    return accepted, rejected
+
+
 def find_cross_page_duplicates(entries: list[dict]) -> list[dict]:
     """Detect the same placement shown on more than one result page (pagination drift, I-4).
 

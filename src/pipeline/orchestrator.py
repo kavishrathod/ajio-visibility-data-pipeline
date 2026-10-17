@@ -9,6 +9,7 @@ import sqlite3
 import time
 import uuid
 from datetime import datetime, timezone
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -21,11 +22,13 @@ from src.collectors.ratelimit import NullRateLimiter, RateLimiter
 from src.collectors.replay_adapter import ReplayAdapter
 from src.config import AppConfig
 from src.logger import get_logger
+from dataclasses import asdict
+
 from src.parsers.product_parser import ProductUnit, parse_products
 from src.pipeline.completeness import format_hour
 from src.timeutil import IST, parse_utc
 from src.pipeline.ranking import assign_ranks
-from src.pipeline.validator import find_cross_page_duplicates, validate_units
+from src.pipeline.validator import find_cross_page_duplicates, validate_entries
 from src.storage.database import Database, utc_now_iso
 
 logger = get_logger(__name__)
@@ -82,12 +85,19 @@ def _write_raw_file(config: AppConfig, run_id: str, keyword: str, response: RawR
     return relative_path.as_posix(), sha256
 
 
-def _dedupe_entries(entries: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
-    units, rejected = validate_units(entry["unit"] for entry in entries)
-    by_identity = {id(entry["unit"]): entry for entry in entries}
-    accepted = [by_identity[id(unit)] for unit in units if id(unit) in by_identity]
-    dup_count = sum(1 for item in rejected if "duplicate_placement_dropped" in item.get("errors", []))
-    return accepted, dup_count
+def _quarantine_row(
+    *, run_id: str, platform: str, target_id: int, keyword: str, scheduled_hour: str, page_number: int,
+    record_type: str, record_index: int, stage: str, reason_code: str, reason_detail: str,
+    payload: dict | None, raw_payload_ref: str | None, is_mock: int,
+) -> dict[str, Any]:
+    """One row for ``quarantine_record``: what was rejected, where it came from, and why."""
+    return {
+        "run_id": run_id, "platform": platform, "target_id": target_id, "keyword": keyword,
+        "scheduled_hour": scheduled_hour, "page_number": page_number, "record_type": record_type,
+        "record_index": record_index, "stage": stage, "reason_code": reason_code, "reason_detail": reason_detail,
+        "payload_json": json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str) if payload is not None else None,
+        "raw_payload_ref": raw_payload_ref, "is_mock": is_mock, "created_at": utc_now_iso(),
+    }
 
 
 def _record_skipped_run(db: Database, config: AppConfig, run_id: str, hour_text: str, trigger: str, expected: int, lock_name: str) -> dict[str, Any]:
@@ -193,6 +203,8 @@ def run_pipeline(
     errors: list[str] = []
     db_errors: list[str] = []
     status_counts: dict[str, int] = {}
+    quarantined_total = 0
+    quarantine_reasons: dict[str, int] = {}
 
     def safe(label: str, fn, *args, **kwargs) -> bool:
         """Run a database write; contain sqlite errors so one outage cannot discard fetched data."""
@@ -211,6 +223,9 @@ def run_pipeline(
             keyword = str(target["target_value"])
             max_pages = min(int(target.get("max_pages") or config.max_pages), config.max_pages)
             entries: list[dict[str, Any]] = []
+            quarantine_rows: list[dict[str, Any]] = []
+            qrow = partial(_quarantine_row, run_id=run_id, platform=config.platform, target_id=target_id,
+                           keyword=keyword, scheduled_hour=hour_text)
             valid_page_seen = False
             zero_on_first_page = False
             terminal_status: str | None = None
@@ -261,14 +276,23 @@ def run_pipeline(
                     logger.exception("Target failed: %s", keyword)
                     break
 
+                page_q = partial(qrow, page_number=page, raw_payload_ref=raw_ref, is_mock=int(response.is_mock), stage="parse")
+                for rejected_card in parsed.rejected:
+                    quarantine_rows.append(page_q(record_type="card", record_index=rejected_card.card_index,
+                                                  reason_code=rejected_card.reason_code, reason_detail=rejected_card.detail,
+                                                  payload=rejected_card.payload))
                 if parsed.status == "blocked":
                     terminal_status = "blocked"
                     reason = parsed.reason
                     errors.append(f"{keyword}: {reason}")
+                    quarantine_rows.append(page_q(record_type="page", record_index=0, reason_code="page_blocked",
+                                                  reason_detail=reason, payload={"http_status": response.http_status}))
                     break
                 if parsed.status == "parse_failed":
                     parse_errors += 1
                     reason = parsed.reason
+                    quarantine_rows.append(page_q(record_type="page", record_index=0, reason_code="page_parse_failed",
+                                                  reason_detail=reason, payload={"http_status": response.http_status}))
                     terminal_status = "partial" if entries else "parse_failed"
                     errors.append(f"{keyword}: {reason}")
                     break
@@ -297,7 +321,15 @@ def run_pipeline(
                     "Pagination drift for keyword=%s: %d placement(s) repeated across pages %s; first occurrence kept",
                     keyword, len(drift), json.dumps(drift),
                 )
-            accepted_entries, duplicate_count = _dedupe_entries(entries)
+            accepted_entries, rejected_entries = validate_entries(entries)
+            duplicate_count = sum(1 for item in rejected_entries if item["stage"] == "dedupe")
+            entry_order = {id(entry): position for position, entry in enumerate(entries, start=1)}
+            for item in rejected_entries:
+                entry = item["entry"]
+                quarantine_rows.append(qrow(
+                    page_number=int(entry["page_number"]), record_type="unit", record_index=entry_order[id(entry)],
+                    stage=item["stage"], reason_code=item["reason_code"], reason_detail=item["detail"],
+                    payload=asdict(entry["unit"]), raw_payload_ref=entry["raw_payload_ref"], is_mock=int(entry["is_mock"])))
             if duplicate_count and not drift:
                 logger.info("Dropped %d repeated placement(s) for keyword=%s", duplicate_count, keyword)
 
@@ -346,6 +378,13 @@ def run_pipeline(
                 terminal_status = "failed"
                 reason = "load_failed: database unavailable while loading; raw snapshots preserved, retry with --reload-raw"
                 errors.append(f"{keyword}: {reason}")
+
+            # Quarantine is evidence, not data the run depends on: a failed write is logged via db_errors
+            # but never changes the target's status. The rows can be rebuilt with --reload-raw.
+            if quarantine_rows and safe("quarantine", db.save_quarantine, quarantine_rows):
+                quarantined_total += len(quarantine_rows)
+                for row in quarantine_rows:
+                    quarantine_reasons[row["reason_code"]] = quarantine_reasons.get(row["reason_code"], 0) + 1
 
             stored_rows = 0
             try:
@@ -405,6 +444,8 @@ def run_pipeline(
             "error_count": len(errors),
             "status_counts": status_counts,
             "pagination_anomalies": pagination_anomaly_count,
+            "quarantined_records": quarantined_total,
+            "quarantine_reasons": dict(sorted(quarantine_reasons.items())),
             "rate_limit_wait_seconds": round(getattr(limiter, "total_wait", 0.0), 2),
             "db_errors": db_errors[:5],
             "errors": errors[:20],

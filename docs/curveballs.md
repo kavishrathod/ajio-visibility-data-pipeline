@@ -14,3 +14,15 @@
 | I-10 | Late backfill | missing 09:00 slot | `test_curveballs::test_i10_late_backfill...` | Full |
 | I-11 | Database down mid-run | patched database failures | `test_curveballs::test_i11_*` | Full (mid-run) |
 | I-12 | Alert storm | 40 of 50 targets fail | `test_curveballs::test_i12_forty_failures...`, `test_alerts::test_incident_dedup_cooldown_and_single_recovery` | Full |
+
+## Quarantine evidence
+
+Rejected records for these scenarios are also kept in `quarantine_record` (see `docs/quarantine.md`); tests are in `tests/test_quarantine.py`.
+
+| ID | What is quarantined | Test |
+|---|---|---|
+| I-1 | The page, as `page_parse_failed`, with the raw page path (a healthy `zero_result` page is not quarantined) | `test_unparseable_and_blocked_pages_are_quarantined_but_a_zero_result_is_not` |
+| I-4 | The later copy of a placement repeated across pages, as `cross_page_duplicate`, naming the page that was kept | `test_cross_page_duplicate_is_quarantined_and_names_the_page_that_was_kept` |
+| I-6 | A true duplicate of the same placement, as `duplicate_placement`; the same product as SP and Organic is not a duplicate | `test_rejected_cards_and_duplicates_are_quarantined_with_reason_and_payload` |
+| I-7 | The blocked or challenge page, as `page_blocked` | `test_unparseable_and_blocked_pages_are_quarantined_but_a_zero_result_is_not` |
+| I-11 | Rows are rebuilt by `--reload-raw`; a failed quarantine write never changes a status | `test_reload_raw_rebuilds_quarantine_without_refetching`, `test_a_failed_quarantine_write_never_changes_the_target_status` |

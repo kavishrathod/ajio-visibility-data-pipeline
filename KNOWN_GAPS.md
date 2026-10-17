@@ -10,6 +10,11 @@
 8. **Baselines are simple.** Row-drop uses a rolling median of recent comparable runs, with no seasonality and a minimum of three runs.
 9. **SMTP is tested with a stand-in.** Tests cover credentials-from-environment, failure handling and the file sink. I did not verify delivery to a live Mailpit in this build; do that and capture the email screenshot.
 10. **Live pacing untested.** The rate limiter and backoff are unit-tested with fake clocks and apply to non-mock adapters; they were never run against a real server (and must not be without permission).
-11. **Dashboard** is smoke-tested only (it loads and renders against real tables). On very new Streamlit versions `use_container_width` prints a deprecation warning.
-12. **Not done:** property-based tests, Docker Compose, scaling note, rank-movement report (optional stretch items).
-13. **Screenshots are not included.** `screenshots/` is empty; capture them from your own run (`docs/evidence_checklist.md`). Source-inspection screenshots must show the URL.
+11. **Not done:** property-based tests, Docker Compose, scaling note, rank-movement report (optional stretch items).
+12. **Quarantine is evidence, not a workflow.** Rows are stored and reported, but there is no alert on a high quarantine rate, no retention or purge, and no release or reprocess step for a single record (replay is per hour via `--reload-raw`). A fetch that never returned a page has nothing to quarantine and shows only as `failed` or `partial`. Values normalised to NULL are not quarantined.
+
+13. **Gold is views, not materialised tables.** They are recomputed on every read, which is fine at this scale and the first thing to change at 100x. Brand-level organic-versus-sponsored comparison is not built (the output record has no brand field); the comparison is per product id. Rank-movement reporting is not built.
+
+14. **Test duration varies.** A clean-clone run on the author's Windows machine took 375 seconds for 86 tests, against a few seconds elsewhere. The cause (probably antivirus or file I/O) was not investigated. The brief's 10-minute reproducibility target was still met.
+
+15. **CI is basic.** One workflow runs `pytest` on Python 3.11 and 3.12 plus a mock smoke run. No linting, coverage or dependency pinning.

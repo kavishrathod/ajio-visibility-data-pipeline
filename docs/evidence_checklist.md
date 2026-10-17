@@ -14,4 +14,12 @@ Capture each from **your own run**. Do not edit them, and keep the mock labels v
 | 8 | Test alert email (redacted) | A file from `data/outbox/` opened in a mail client or editor, or Mailpit at http://localhost:8025 with `ALERT_SINK=smtp` |
 | 9 | Full test output including curveballs | `pytest -v` |
 
+Optional extras that show the later additions:
+
+| # | Screenshot | How to produce it |
+|---|---|---|
+| 10 | Quarantine tab | `python -m src.main --run-once`, then Dashboard -> Quarantine (or `python scripts/show_quarantine.py --details`) |
+| 11 | Idempotency proof | Run the same hour twice, then `python scripts/check_idempotency.py` |
+| 12 | Gold aggregates tab | Dashboard -> Gold aggregates |
+
 Tip: for 7, take the screenshot *before* the backfill step of `--demo`, or run the commands by hand. Every screenshot of the dashboard shows the MOCK DATA ONLY banner; keep it in frame.

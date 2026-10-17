@@ -16,6 +16,7 @@ Gold is a set of read-only SQL views defined in `sql/schema.sql`. All data is sy
 |---|---|---|
 | `gold_hour_summary` | platform, hour | Coverage and volume: targets, complete, zero_result, missing, problem, pending, rows, completeness_pct |
 | `gold_keyword_hour` | keyword, hour | Unit mix (organic, SP, SB), paid share, distinct products, min/avg/max selling price, average rating. Built from the status ledger, so a genuine zero-result keyword appears with 0 units and status `zero_result`, and a missing one is visible |
+| `gold_quarantine_summary` | platform, hour, reason | Records rejected on the way to Silver, by record type, stage and reason code, counting only the latest attempt per target-hour (`docs/quarantine.md`) |
 | `gold_product_placement` | product, keyword, hour | Best organic rank vs best sponsored rank for the same product, and how many placements of each. Both set = the product was shown as organic and as a paid unit (I-6) |
 
 ## Limits

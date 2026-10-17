@@ -86,7 +86,7 @@ if st.button("Evaluate completeness and process alert"):
 if "completeness_result" in st.session_state:
     st.json(st.session_state["completeness_result"])
 
-run_tab, product_tab, status_tab, alert_tab, grid_tab, gold_tab = st.tabs(["Run history", "Visibility products", "Target-hour status", "Alert incidents", "Coverage grid", "Gold aggregates"])
+run_tab, product_tab, status_tab, alert_tab, grid_tab, gold_tab, quarantine_tab = st.tabs(["Run history", "Visibility products", "Target-hour status", "Alert incidents", "Coverage grid", "Gold aggregates", "Quarantine"])
 
 with run_tab:
     runs = db.query(
@@ -190,3 +190,33 @@ with gold_tab:
             "AND best_organic_rank IS NOT NULL AND best_sp_rank IS NOT NULL ORDER BY keyword, best_sp_rank",
             (config.platform, gold_hour)))
         st.dataframe(both_df, use_container_width=True, hide_index=True)
+
+with quarantine_tab:
+    st.subheader("Quarantine: rejected records")
+    st.caption("Cards, placements and whole pages rejected on the way to the normalized table, with the reason and the raw page they came from. "
+               "Counts show the latest attempt per target and slot. Mock data only.")
+    q_hours = [r["scheduled_hour"] for r in db.query(
+        "SELECT DISTINCT scheduled_hour FROM quarantine_record WHERE platform=? ORDER BY scheduled_hour DESC LIMIT 48", (config.platform,))]
+    if not q_hours:
+        st.info("Nothing has been quarantined yet.")
+    else:
+        q_hour = st.selectbox("Slot", q_hours, format_func=ist_label, key="quarantine_hour")
+        by_reason = pd.DataFrame(db.query(
+            "SELECT record_type, stage, reason_code, records, targets_affected FROM gold_quarantine_summary "
+            "WHERE platform=? AND scheduled_hour=? ORDER BY records DESC, reason_code", (config.platform, q_hour)))
+        st.markdown("**By reason** (`gold_quarantine_summary`)")
+        st.dataframe(by_reason, use_container_width=True, hide_index=True)
+        reasons = ["(all)"] + (by_reason["reason_code"].tolist() if not by_reason.empty else [])
+        reason_pick = st.selectbox("Reason", reasons, key="quarantine_reason")
+        where, params = ["q.platform=?", "q.scheduled_hour=?"], [config.platform, q_hour]
+        if reason_pick != "(all)":
+            where.append("q.reason_code=?"); params.append(reason_pick)
+        detail = pd.DataFrame(db.query(
+            "SELECT q.keyword, q.page_number, q.record_type, q.record_index, q.stage, q.reason_code, q.reason_detail, "
+            "q.raw_payload_ref, q.payload_json, q.run_id "
+            "FROM quarantine_record q JOIN target_hour_status s ON s.platform=q.platform AND s.target_id=q.target_id "
+            "AND s.scheduled_hour=q.scheduled_hour AND s.last_run_id=q.run_id "
+            f"WHERE {' AND '.join(where)} ORDER BY q.keyword, q.page_number, q.record_index LIMIT 500", tuple(params)))
+        st.markdown("**Records** (latest attempt, up to 500)")
+        st.dataframe(detail, use_container_width=True, hide_index=True)
+

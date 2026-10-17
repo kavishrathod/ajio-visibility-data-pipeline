@@ -47,12 +47,22 @@ class ProductUnit:
 
 
 @dataclass
+class RejectedCard:
+    """A product card the parser could not turn into a record. Feeds the quarantine layer."""
+    card_index: int            # 1-based position of the card within the page grid
+    reason_code: str           # card_missing_name | card_missing_identity
+    detail: str
+    payload: dict = field(default_factory=dict)  # attributes and a text snippet of the card, for diagnosis
+
+
+@dataclass
 class ParseResult:
     status: str  # ok | zero_result | parse_failed | blocked
     units: list[ProductUnit] = field(default_factory=list)
     reason: str = ""
     warnings: list[str] = field(default_factory=list)
     total_items: Optional[int] = None  # JSON-LD ItemList.numberOfItems, when present
+    rejected: list[RejectedCard] = field(default_factory=list)  # cards dropped for quarantine
 
 
 def parse_price(value: str | None) -> str | None:
@@ -127,6 +137,12 @@ def _field(card, attr: str, selector: str | None = None) -> str | None:
     return None
 
 
+def _card_payload(card) -> dict:
+    """Diagnostic copy of a rejected card: its attributes (class list flattened) and a short text snippet."""
+    attrs = {k: (" ".join(v) if isinstance(v, list) else v) for k, v in card.attrs.items()}
+    return {"attributes": attrs, "text": card.get_text(" ", strip=True)[:200]}
+
+
 def parse_item_list(soup) -> tuple[list[dict], Optional[int], list[str]]:
     """Read the JSON-LD ``ItemList``: ([{position,name,url,image}, ...] sorted by position, numberOfItems, warnings)."""
     items: list[dict] = []
@@ -191,6 +207,7 @@ def parse_products(body: str, http_status: int = 200) -> ParseResult:
         return ParseResult("parse_failed", reason="Grid exists but has no product cards and no no-results marker")
 
     units: list[ProductUnit] = []
+    rejected: list[RejectedCard] = []
     warnings: list[str] = list(ld_warnings)
     product_cards = sum(1 for c in cards if (_field(c, "data-kind") or "").strip().upper() != "SB")
     if ld_items and len(ld_items) != product_cards:
@@ -229,9 +246,11 @@ def parse_products(body: str, http_status: int = 200) -> ParseResult:
         # SB brand units may legitimately lack a product ID/URL. Product units must be identifiable.
         if not name:
             warnings.append(f"Card {idx} skipped: product name missing")
+            rejected.append(RejectedCard(idx, "card_missing_name", "product name missing", _card_payload(card)))
             continue
         if product_type != "SB" and not (pid or url):
             warnings.append(f"Card {idx} skipped: product has neither ID nor URL")
+            rejected.append(RejectedCard(idx, "card_missing_identity", "product has neither ID nor URL", _card_payload(card)))
             continue
 
         units.append(ProductUnit(
@@ -250,5 +269,5 @@ def parse_products(body: str, http_status: int = 200) -> ParseResult:
         ))
 
     if not units:
-        return ParseResult("parse_failed", reason="Product grid had cards, but none passed basic validation", warnings=warnings)
-    return ParseResult("ok", units=units, warnings=warnings, total_items=total_items)
+        return ParseResult("parse_failed", reason="Product grid had cards, but none passed basic validation", warnings=warnings, rejected=rejected)
+    return ParseResult("ok", units=units, warnings=warnings, total_items=total_items, rejected=rejected)
