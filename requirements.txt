@@ -5,3 +5,4 @@ APScheduler>=3.10,<4
 pandas>=2.0,<4
 streamlit>=1.35,<2
 pytest>=8.0,<9
+hypothesis>=6.100,<7

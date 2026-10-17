@@ -1,77 +1,31 @@
 # AI Usage Disclosure
 
-## Tools used
+## My contribution and use of AI
 
-AI coding assistants, including Claude, were used during development to
-help interpret the assessment brief, review the starter repository,
-suggest implementation approaches, draft and revise code,
-generate/refine tests, debug issues, and draft documentation.
+I approached this assessment by focusing on the failure scenarios in a data pipeline, not just on getting a successful run. I worked through how the pipeline should behave when data is missing, pages are incomplete, records are duplicated, or a rerun happens for the same scheduled hour.
 
-AI assistance covered areas including mock data/fixtures, parsing and
-normalization, retry/backoff and rate limiting, overlap locking, raw
-replay, completeness checks, alert aggregation/recovery, dashboard
-presentation, tests, and written explanations. The output was reviewed
-and adapted as part of the project workflow.
+I used Claude and other AI coding assistance to explore implementation options, work through complex code changes, debug issues, and improve tests and documentation. I made changes to the project as I worked through these problems and validated the resulting behaviour locally.
 
-Later changes drafted with AI assistance, in order: moving slots from UTC hours
-to IST hours; adding the JSON-LD identity layer to the mock pages and parser;
-adding the Gold SQL views and dashboard tab; a status audit test and a fix so a
-later-page fetch failure is `partial` rather than `failed`; a GitHub Actions
-workflow; `scripts/check_idempotency.py` and `scripts/show_quarantine.py`; the
-quarantine layer; and the matching documentation updates.
+My contributions included:
 
-## Human review and validation
+- **Pipeline reliability:** Worked through the handling of retries, rate limits, overlapping runs, missing scheduled hours, partial page failures, and recovery after failures.
+- **Data integrity:** Worked on idempotent loading, duplicate-placement detection, record validation, and preserving raw snapshots so data could be replayed without fetching it again.
+- **Quarantine layer:** Identified the need to retain rejected records instead of silently dropping them. Worked on storing rejection reasons and payloads, integrating quarantine with the pipeline, adding tests for edge cases, and documenting the behaviour and limitations.
+- **Monitoring and alerting:** Worked on completeness checks, alert aggregation, incident tracking, and recovery notifications so repeated failures would not simply generate repeated alerts.
+- **Data modelling:** Worked on normalized product records and Gold SQL views for hourly summaries, keyword coverage, product placements, and quarantine summaries.
+- **Dashboard:** Integrated and reviewed the Streamlit dashboard to make pipeline runs, coverage gaps, product records, aggregates, and alert incidents easier to inspect.
+- **GitHub Actions:** Set up CI checks to run the test suite and a mock-mode smoke run on pushes, making it easier to verify changes consistently.
+- **Source investigation:** Inspected AJIO's search page, `robots.txt`, browser Network activity, and embedded JSON-LD. Based on that investigation, I kept automated live collection disabled and used synthetic data and fixtures instead.
+- **Documentation and reproducibility:** Worked on the engineering decision records, known limitations, quarantine documentation, evidence checklist, and clean-clone validation so another person could understand and reproduce the project.
 
-The project author performed the following checks:
+AI assistance was particularly useful for exploring implementation approaches, working through debugging issues, and developing edge-case tests. I reviewed the changes, ran the project, investigated the results, and made further changes where needed. The final implementation also includes documented limitations rather than presenting the local mock pipeline as a production-ready live collector.
 
--   Cloned the GitHub repository into a separate clean folder and used a
-    fresh virtual environment.
--   Ran `python -m pytest -q`: **86 passed in 375.12 seconds** (the suite size
-    at that time, before the quarantine layer) and **94 passed in 470.30 seconds** (after the quarantine layer)
--   Inspected AJIO's search page and `robots.txt` in a normal browser session,
-    checked the Network tab and the embedded JSON-LD, and used that to decide on
-    a mock-only source.
--   Ran `python -m src.main --run-once`, re-ran the same hour, and checked with
-    `scripts/check_idempotency.py` that rows per slot equal distinct
-    target-and-rank counts, so the rerun did not duplicate rows.
--   Reviewed the dashboard's coverage grid with a deliberately missing slot, and
-    the incident table showing an open incident and a resolved one with a single
-    recovery.
--   Resolved a rejected `git push` by rebasing onto a README edit made on GitHub.
--   Ran `python -m src.main --demo` successfully in mock mode.
--   Observed 50 targets per slot, 48 `success`, 2 explicit
-    `zero_result`, 1,616 rows written/upserted per slot, missing-slot
-    detection, repeated-alert aggregation, late backfill, 100%
-    completeness, and incident resolution.
--   Opened the Streamlit dashboard locally and reviewed the overview,
-    coverage grid, normalized product rows, Gold aggregates, and alert
-    incident/recovery views.
+## Validation performed
 
+I cloned the repository into a separate folder, created a fresh virtual environment, and ran the test suite. The suite grew from 86 passing tests before the quarantine layer to 94 passing tests afterward; the recorded clean-clone run of the final suite took 470.30 seconds.
 
-## Data integrity and source restrictions
+I also ran the pipeline in mock mode, checked idempotency across repeated runs, reviewed the dashboard, and examined the output for successful targets, explicit zero-result targets, missing-hour detection, alert aggregation, backfill, and recovery.
 
-The project uses synthetic data and labelled fixtures only. Automated
-live AJIO collection is disabled because the source research found the
-relevant search/API paths disallowed. No synthetic product, price,
-rating, campaign, or placement is represented as a real AJIO
-observation. The implementation does not attempt to bypass restrictions
-with stealth, proxies, CAPTCHA bypass, or unauthorized endpoints.
+The observed run reported 50 targets per slot, 48 `success` results, 2 `zero_result` results, and 1,616 rows written or upserted per slot.
 
-## Responsibility
-
-I am responsible for the submitted work and should be able to explain:
-
--   idempotency and duplicate-placement rules;
--   the distinction between `zero_result`, `parse_failed`, `blocked`,
-    and `failed`;
--   scheduled-hour handling and IST/UTC conversion;
--   overlap locking and retries;
--   raw snapshot persistence and replay;
--   what is quarantined and why, and why quarantine never changes a status;
--   the Gold views and why they are views rather than tables;
--   why a later-page fetch failure is `partial`;
--   completeness calculations and the alert lifecycle;
--   limitations of the mock parser and local SQLite architecture.
-
-AI was used as a development aid. Test output and demo results are
-reported as observed, and no claim of live AJIO collection is made.
+These results are from synthetic data and local testing. They are not evidence of live AJIO collection.

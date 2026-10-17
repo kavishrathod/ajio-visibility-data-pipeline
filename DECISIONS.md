@@ -1,241 +1,59 @@
-# Engineering Decisions
+# DECISIONS.md
 
-> **Scope:** product observations are synthetic or fixture-based.
-> Automated live AJIO collection is disabled because the project's
-> source research found the relevant search/API paths disallowed. Live
-> DOM behaviour is not claimed as verified.
+## 1. Identifying product types on AJIO
 
-Mapping to the brief's six questions: 1 = section 1, 2 = section 2, 3 = section 3,
-4 = section 4, 5 = section 9 (curveballs), 6 = section 10 (100x). Sections 5 to 8 and
-11 record further decisions.
+**Choice:** I used the placement labels available in my mock pages to distinguish Sponsored Brand (SB), Sponsored Product (SP), and Organic results. I store the product type separately from the rank so that sponsored and organic placements are not treated as the same type of result. I also inspected the page source and embedded JSON-LD during source research, but JSON-LD alone was not sufficient evidence to identify every placement type.
 
-## 1. Placement type
+**Alternative rejected:** I rejected inferring product type from rank or product position alone because an item appearing first does not prove that it is sponsored.
 
-**Chosen:** use an explicit mock-card marker (`data-kind`) for `SB` and
-`SP`; otherwise classify as Organic. Preserve `campaign_id` when
-present. A sponsored-brand banner may not have a product ID or price.
-
-**Rejected:** infer sponsorship from rank, price, or title, because
-these do not prove a placement is sponsored.
-
-**Trade-off:** markers are verified against mock/fixture structure only;
-the live AJIO DOM has not been validated.
-
-**What was actually observed:** the search page embeds a schema.org JSON-LD
-`ItemList` (name, image, URL, position, `numberOfItems`). It has no price and no
-sponsored marker, so it cannot decide a placement type. The mock pages carry that
-layer for product identity and put price, rating and placement on simulated cards.
-
-**Rejected:** treating the JSON-LD as proof that a page is healthy. A page with
-JSON-LD but no product grid is `parse_failed`, because price and placement exist
-only in the grid. A disagreement between the two (different product at a position,
-different counts) is logged as a parser warning and the JSON-LD is not trusted for
-that card.
+**Limitation:** My automated pipeline uses labelled mock data. I did not verify the live AJIO rendered DOM or establish that its actual sponsored-placement markers follow the same contract. I therefore do not claim that the pipeline is collecting verified live AJIO placements.
 
 ## 2. Idempotency and deduplication
 
-**Chosen:** upsert normalized rows using
-`(platform, target_id, scheduled_hour, absolute_rank)`. Within a run,
-deduplicate by placement type plus product identity (`product_id` or URL
-identity) and campaign identity for paid placements. The same product
-appearing as SP and Organic remains two placements.
+**Choice:** I use a stable product identity, based on the available product ID or URL, together with the scheduled hour, keyword, and placement information to identify a placement. Repeated placements are detected, while different placement types for the same product can remain distinct. Database upserts and duplicate checks allow the same scheduled hour to be processed again without simply appending another copy of every row.
 
-**Rejected:** append-only inserts keyed by `run_id`, which would
-duplicate the current slot on reruns.
+**Alternative rejected:** I rejected inserting every collected row as a new record because retries, backfills, and rerunning an hour would inflate counts and corrupt the results.
 
-**Reason:** reruns/backfills should converge to one current view per
-target-hour. Raw snapshots and the run ledger retain attempt history.
-Complete parses can remove stale ranks; partial/failed parses must not
-erase previously valid rows.
+**What happens on a rerun:** The pipeline can process the same hour again without duplicating the same placements. Raw collection evidence and run history are retained separately from the normalized results, so a rerun does not mean that all evidence of the earlier attempt is discarded.
 
-## 3. Zero results versus failure
+**Limitation:** Deduplication depends on having a usable product identity. If a product has neither a reliable ID nor a usable URL, identity matching becomes less reliable.
 
-**Chosen:** `zero_result` requires an explicit no-results marker and a
-present result grid with no cards. Missing/renamed structure, empty grid
-without a marker, or records failing validation are parser failures.
-403/challenge or 429 beyond its retry budget is blocked; exhausted
-retries are failed.
+## 3. Genuine zero results versus a failed slot
 
-**Rejected:** treat every parse with zero cards as a legitimate
-zero-result search.
+**Choice:** I distinguish `zero_result` from collection and parsing failures. A slot is considered a genuine zero-result slot only when the expected no-results indicator is present. A page that returns successfully but contains no usable product information is not automatically treated as empty; it can be marked `parse_failed`. Blocking, request failures, and partial pagination have separate outcomes.
 
-**Partial:** if page 1 parsed and a later page fails, either by a parse failure
-or because its fetch retries are exhausted, the target is `partial`. The page-1
-rows are kept, the slot is not complete, and earlier good rows are never erased.
-Before a status audit, an exhausted fetch on page 2 was recorded as `failed`
-even though page 1 had been saved. Rejected records and whole failed pages are
-kept in the quarantine layer (section 11).
+**Alternative rejected:** I rejected treating an empty product list as proof that no products exist because an incomplete page, changed layout, or blocked request could produce the same symptom.
 
-**Reason:** layout changes and blocks must not look like healthy
-searches. Only `success` and `zero_result` count as complete.
+**Why it matters:** This distinction prevents a collection failure from appearing as a legitimate drop in product visibility. I retain raw evidence where available so that parsing or loading issues can be investigated and, where supported, replayed.
 
-## 4. Hour assignment
+**Limitation:** The no-results and parsing rules are tested against mock pages and fixtures. Live AJIO page behaviour has not been verified.
 
-**Chosen:** fix `scheduled_hour` to the intended IST hour at run start
-and store it as a UTC instant. `time_stamp` is the actual fetch time.
-Backfills use the requested old slot.
+## 4. Assigning rows to an hour
 
-**Rejected:** assign rows based on completion time, which can move late
-runs into the wrong hour.
+**Choice:** I assign rows to the **scheduled collection hour**, rather than the exact time when a request finishes. Slots are defined using IST, while the stored scheduled-hour timestamp is represented as a UTC instant. This keeps results from the same scheduled slot together even if a request finishes late or the slot is backfilled later.
 
-**Also rejected:** UTC hour slots. They are simpler, but IST is UTC+5:30, so a
-UTC slot would display as 10:30 IST and the brief's "10:00 IST run" would not land
-in a 10:00 IST slot. Slots are floored to the IST hour and stored as UTC instants
-(10:00 IST is `04:30Z`), so storage and comparison stay unambiguous.
+**Alternative rejected:** I rejected assigning each row to its individual collection timestamp because slow requests and retries could spread one scheduled collection across different hourly buckets, making coverage and comparisons inconsistent.
 
-**Reason:** completeness and backfills need consistent slot identity.
-The scheduler fires at minute 30 UTC to align with IST hours. The IST
-offset is currently a code constant, not a dynamic setting.
+**Limitation:** The current implementation uses a fixed IST offset in its time utility rather than a fully configurable timezone implementation. The scheduling and timestamp conversion should be reviewed if the deployment timezone or scheduling requirements change.
 
-## 5. Raw-first storage and replay
+## 5. Curveballs: fully handled, partially handled, or skipped
 
-**Chosen:** write raw HTML and metadata sidecars before database
-loading. `--reload-raw --hour <hour>` reprocesses saved snapshots
-without refetching.
+**Choice:** I prioritised failure scenarios that could silently corrupt the data or make monitoring misleading.
 
-**Rejected:** retain only parsed rows or fetch again after a database
-failure.
+- **Handled in the mock/tested implementation:** Re-running an hour without duplicating normalized placements; distinguishing explicit zero results from failures; detecting missing scheduled slots; aggregating repeated alerts and recording recovery; and quarantining rejected records with reasons rather than silently treating them as valid data.
+- **Partially handled:** Unusable pages, malformed values, pagination overlap, later-page failures, throttling/blocking, and database recovery have handling and test coverage, but the tests use fixtures or mocked behaviour rather than live AJIO requests. Pagination checks cannot detect a product missing from every returned page when there is no independent expected total.
+- **Not implemented or not fully verified:** Live AJIO collection, production-scale scheduling, a complete quarantine reprocessing workflow, quarantine retention/purge policies, and high-volume quarantine alerts. I did not attempt to bypass source restrictions to test live collection.
 
-**Reason:** raw evidence supports debugging and replay while preserving
-original fetch timestamps. This is a local replay mechanism, not
-distributed checkpointing.
+**Alternative rejected:** I rejected treating every curveball as successfully solved just because a test run passed. A passing fixture test demonstrates the tested behaviour, not that the same behaviour has been verified against a live source or production infrastructure.
 
-## 6. Local architecture
+**Why:** I wanted failures to remain visible and documented, rather than hide uncertainty behind a success status.
 
-**Chosen:** SQLite, a database overlap lock, APScheduler, and SQL views
-for Gold aggregates.
+## 6. What would break first at 100× the number of targets?
 
-**Rejected:** add distributed workers, a separate orchestration service,
-or a production warehouse before the local assessment flow is validated.
+**Choice:** I kept the current implementation local-first, using SQLite, a single-host overlap lock, raw snapshots, and a scheduler that runs on the same environment. This keeps the assessment reproducible and avoids introducing infrastructure that the current workload does not require.
 
-**Reason:** this is a local-first mock assessment. The sequential
-collector, SQLite single-writer behaviour, and global lock are scope
-limits.
+**Alternative rejected:** I rejected adding distributed infrastructure solely to make the project look production-scale before validating the core collection, data-quality, and recovery behaviour.
 
-**Gold as views, not tables:** `gold_hour_summary`, `gold_keyword_hour`,
-`gold_product_placement` and `gold_quarantine_summary` are SQL views. They always
-agree with the normalized rows and the status ledger, and a rerun or backfill
-cannot create duplicate aggregates. The cost is recomputation on every read, which
-is negligible here. GitHub Actions runs the tests and a smoke run on each push.
+**What would break first:** At 100× the target count, collection time and request volume would increase first. A single process could struggle to finish within the hourly window, while SQLite writes, the single-host lock, and dashboard queries could become bottlenecks. Increasing concurrency without coordinated rate limits could also create excessive request traffic or make overlapping runs harder to control.
 
-## 7. Alert lifecycle
-
-**Chosen:** persist incidents per platform-hour, aggregate active
-conditions, deduplicate repeat notifications according to incident
-state/cooldown, and send a recovery notification when the slot becomes
-healthy.
-
-**Rejected:** send one email per failed keyword or send another email on
-every repeated check.
-
-**Reason:** aggregation reduces alert storms. The demo exercised a
-missing-hour alert, repeated-check aggregation, late backfill, 100%
-completeness, and incident resolution/recovery state.
-
-## 8. Respect source restrictions
-
-**Chosen:** disable live AJIO collection and clearly label synthetic
-data.
-
-**Rejected:** stealth, proxies, CAPTCHA bypass, private endpoints, or
-other ways of evading access restrictions.
-
-**Reason:** demonstrate pipeline engineering without misrepresenting
-synthetic observations or bypassing restrictions.
-
-## 9. Curveball scenarios and limitations
-
-  -----------------------------------------------------------------------
-  Scenario                Behaviour covered       Limitation
-  ----------------------- ----------------------- -----------------------
-  Silent layout change    `parse_failed`;         Live AJIO DOM not
-                          preserve raw; do not    tested
-                          report zero results     
-
-  Genuine zero results    Explicit marker becomes Depends on mock/fixture
-                          `zero_result`           contract
-
-  Mixed placements        Separate SB, SP,        Real-site markers
-                          Organic rows and ranks  unverified
-
-  Pagination              Duplicate detection and Items absent from all
-  overlap/drift           anomaly logging         returned pages cannot
-                                                  be inferred without an
-                                                  independent count
-
-  Messy values            Parse supported         Limited to mock/fixture
-                          price/rating/count      formats
-                          formats and nulls       
-
-  Same product twice      Remove duplicate        Identity depends on
-                          placement; preserve     product ID/URL
-                          different placement     availability
-                          types                   
-
-  Throttling/blocking     Bounded `Retry-After`;  Exercised through
-                          stop on 403/challenge   mocks, not live AJIO
-                                                  requests
-
-  Hour boundary           Keep scheduled slot     IST offset is a code
-                          fixed                   constant
-
-  Overlapping runs        Lock; second run skips  Local single-process
-                          fetching                architecture
-
-  Late backfill           Idempotent old-slot     Requires retained
-                          load and incident       raw/config
-                          recovery                
-
-  DB failure mid-load     Raw-first persistence   DB unavailable before
-                          and replay              start prevents run
-                                                  startup
-
-  Alert storm             Aggregate triggers per  Email delivery depends
-                          platform-hour           on local configuration
-  -----------------------------------------------------------------------
-
-The scenario-to-test map is in
-[`docs/curveballs.md`](docs/curveballs.md).
-
-## 10. What would break first at 100× scale?
-
-**First bottleneck:** sequential collection under conservative
-per-source rate limits. At 0.5 requests/second, 10,000 requests require
-over five hours before response overhead.
-
-**Next:** SQLite's single writer, one platform-wide lock, and a large
-coverage grid.
-
-**Also at scale:** the quarantine table grows with every rejected record and has no
-retention yet, and the Gold views would need to be materialised per hour.
-
-**Possible future design:** PostgreSQL, workers with per-source rate
-limits and per-target leases, object storage with retention, and
-aggregated dashboard queries. These are deferred because the current
-assessment is local and mock-first.
-
-## 11. Quarantine of rejected records
-
-**Chosen:** store every record or page rejected on the way to the normalized table
-in `quarantine_record`: unparseable cards (`card_missing_name`,
-`card_missing_identity`), placements failing validation, repeated placements
-(`duplicate_placement`, `cross_page_duplicate`), and whole pages that failed to
-parse or were blocked (`page_parse_failed`, `page_blocked`). Each row keeps the
-reason, the payload, and the path of the raw page. Rows are append-only per run
-(`INSERT OR IGNORE` on a unique key); `gold_quarantine_summary` counts the latest
-attempt per target-hour only.
-
-**Rejected:** (a) log-only rejection, which loses the evidence and cannot be
-queried; (b) overwrite quarantine rows on a rerun, which erases the history of
-earlier attempts; (c) failing the target when a quarantine write fails.
-
-**Reason:** a silently dropped record is indistinguishable from a record that never
-existed, and the brief asks for invalid data to be detected rather than hidden.
-Quarantine is evidence, not a dependency: a failed write is reported in the run's
-`db_errors` but never changes a status, and `--reload-raw` rebuilds the rows from
-the raw pages.
-
-**Not quarantined:** a genuine `zero_result` (healthy), and values normalised to
-NULL (the record is valid). Not built: an alert on a high quarantine rate, and a
-release or reprocess workflow. See `docs/quarantine.md`.
-
+**Next step:** I would measure runtime and database load, then move scheduling and work distribution to a durable queue, use bounded workers with coordinated rate limits, and consider a database designed for concurrent workloads. I would partition raw data by scheduled hour and make monitoring track queue lag, failed targets, and slot completeness. I would scale based on measured bottlenecks rather than simply increasing concurrency.

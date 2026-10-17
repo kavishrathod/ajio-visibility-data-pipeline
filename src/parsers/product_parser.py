@@ -27,7 +27,8 @@ from urllib.parse import urljoin, urlsplit
 from bs4 import BeautifulSoup
 
 
-_PRODUCT_RE = re.compile(r"/p/([A-Za-z0-9-]+)(?:_([A-Za-z0-9-]+))?")
+# The product segment is the last one in the path, so a title slug that happens to be "p" cannot be mistaken for it.
+_PRODUCT_RE = re.compile(r"/p/([A-Za-z0-9-]+)(?:_([A-Za-z0-9-]+))?/?$")
 
 
 @dataclass
@@ -104,7 +105,9 @@ def parse_count(value: str | None) -> int | None:
 def parse_rating(value: str | None) -> float | None:
     if not value:
         return None
-    match = re.search(r"(?<!\d)([0-5](?:\.\d+)?)(?!\d)", value)
+    # (?<![\d.]) stops the fractional digit of an out-of-range rating being read on its own:
+    # "7.5" must be null, not 5.0, and "6.0" must be null, not 0.0.
+    match = re.search(r"(?<![\d.])([0-5](?:\.\d+)?)(?!\d)", value)
     if not match:
         return None
     try:
