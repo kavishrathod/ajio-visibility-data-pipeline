@@ -1,11 +1,13 @@
 # Alternative to `python -m src.main --schedule`: let the OS scheduler call a one-shot command each hour.
 # The pipeline is idempotent per hour and protected by a database lock, so a late or doubled trigger is safe.
 #
-# Linux/macOS crontab (minute 0 of every hour, then the previous hour's completeness check at minute 20):
-0  * * * *  cd /path/to/ajio-visibility-pipeline && .venv/bin/python -m src.main --run-once --trigger scheduled
-20 * * * *  cd /path/to/ajio-visibility-pipeline && .venv/bin/python -m src.main --check-completeness
+# Slots are IST hours. IST = UTC+05:30, so the top of an IST hour is minute 30 on a UTC server clock.
+# (If the machine clock is set to IST, use minute 0 and minute 50 instead.)
+# Linux/macOS crontab on a UTC machine (run at IST top-of-hour, check at +20 minutes):
+30 * * * *  cd /path/to/ajio-visibility-pipeline && .venv/bin/python -m src.main --run-once --trigger scheduled
+50 * * * *  cd /path/to/ajio-visibility-pipeline && .venv/bin/python -m src.main --check-completeness
 #
-# Windows Task Scheduler (hourly, repeat every 1 hour):
+# Windows Task Scheduler (local time = IST: start at hh:00, repeat every 1 hour):
 #   Program: C:\path\to\ajio-visibility-pipeline\.venv\Scripts\python.exe
 #   Arguments: -m src.main --run-once --trigger scheduled
 #   Start in:  C:\path\to\ajio-visibility-pipeline

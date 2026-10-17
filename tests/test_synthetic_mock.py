@@ -3,7 +3,7 @@ from src.collectors.synthetic import ORGANIC_COUNT, PAGE_SIZE, build_listing, re
 from src.parsers.product_parser import parse_products
 from src.pipeline.ranking import RankState, assign_ranks
 
-H1, H2 = "2026-10-16T05:00:00Z", "2026-10-16T06:00:00Z"
+H1, H2 = "2026-10-16T05:30:00Z", "2026-10-16T06:30:00Z"
 
 
 def _all_units(keyword, slot):

@@ -9,6 +9,7 @@ be a real AJIO observation.
 from __future__ import annotations
 
 import hashlib
+import json
 import random
 import re
 from dataclasses import dataclass
@@ -137,22 +138,45 @@ def build_listing(keyword: str, slot: str) -> list[SyntheticUnit]:
 
 
 def _card(unit: SyntheticUnit) -> str:
+    """One simulated grid card.
+
+    Product cards carry price/placement/rating data only (the SIMULATED layer). Their name, url
+    and image are published in the page's JSON-LD ItemList instead (the OBSERVED layer), as on
+    the real page. Brand banners are not products, so they carry their own name and image.
+    """
+    is_banner = unit.kind == "SB"
     attrs = {
         "data-kind": unit.kind,
-        "data-name": unit.name,
+        "data-name": unit.name if is_banner else None,
         "data-product-id": unit.product_id,
-        "data-url": unit.url,
         "data-price": unit.price,
         "data-mrp": unit.mrp,
         "data-rating": unit.rating,
         "data-rating-count": unit.rating_count,
         "data-tag": unit.tag or None,
         "data-deal": unit.deal or None,
-        "data-image": unit.image,
+        "data-image": unit.image if is_banner else None,
         "data-campaign-id": unit.campaign_id,
     }
     rendered = " ".join(f'{k}="{escape(str(v), quote=True)}"' for k, v in attrs.items() if v)
-    return f'  <article class="product-card" {rendered}><h2>{escape(unit.name)}</h2></article>'
+    inner = f"<h2>{escape(unit.name)}</h2>" if is_banner else ""
+    return f'  <article class="product-card" {rendered}>{inner}</article>'
+
+
+def _item_list(chunk: list[SyntheticUnit], total_products: int, keyword: str) -> str:
+    """JSON-LD ItemList in the observed shape: name, image, url, position (+ numberOfItems)."""
+    products = [u for u in chunk if u.kind != "SB"]
+    data = {
+        "@context": "http://schema.org",
+        "@type": "ItemList",
+        "url": f"https://www.ajio.com/search/?text={keyword.replace(' ', '+')}",
+        "numberOfItems": str(total_products),
+        "itemListElement": [
+            {"@type": "ListItem", "name": u.name, "image": u.image, "url": u.url, "position": n}
+            for n, u in enumerate(products, start=1)
+        ],
+    }
+    return '<script type="application/ld+json">' + json.dumps(data, ensure_ascii=False).replace("</", "<\\/") + "</script>"
 
 
 def render_page(keyword: str, page: int, slot: str) -> str:
@@ -165,4 +189,6 @@ def render_page(keyword: str, page: int, slot: str) -> str:
             '<p data-testid="no-results">No more products for this search.</p></main></body></html>'
         )
     cards = "\n".join(_card(u) for u in chunk)
-    return f'{MARKER}\n<html><body><section data-testid="product-grid">\n{cards}\n</section></body></html>'
+    total_products = sum(1 for u in listing if u.kind != "SB")
+    ld = _item_list(chunk, total_products, keyword)
+    return f'{MARKER}\n<html><head>{ld}</head><body><section data-testid="product-grid">\n{cards}\n</section></body></html>'

@@ -36,18 +36,18 @@ A run takes about one second with the mock. Against a real site the configured p
 
 | Goal | Command |
 |---|---|
-| Collect all keywords for the current UTC hour | `python -m src.main --run-once` |
+| Collect all keywords for the current IST hour | `python -m src.main --run-once` |
 | Collect one keyword only (diagnostics) | `python -m src.main --run-once --keyword "men white sneakers"` |
-| **Backfill a specific past hour** | `python -m src.main --run-once --hour 2026-10-16T09:00:00Z` (recorded as trigger `backfill`) |
+| **Backfill a specific past hour** | `python -m src.main --run-once --hour 2026-10-16T09:00:00+05:30` (09:00 IST slot; recorded as trigger `backfill`) |
 | Backfill the last N completed hours | `python -m src.main --backfill-hours 3` |
 | **Hourly scheduling** (foreground) | `python -m src.main --schedule` |
 | Hourly scheduling with cron / Task Scheduler | see [`config/cron.example`](config/cron.example) |
-| Check an hour: missing slots, triggers, alert/recovery | `python -m src.main --check-completeness --hour 2026-10-16T09:00:00Z` |
-| **Recover from a database failure** (no refetch) | `python -m src.main --reload-raw --hour 2026-10-16T09:00:00Z` |
+| Check an hour: missing slots, triggers, alert/recovery | `python -m src.main --check-completeness --hour 2026-10-16T09:00:00+05:30` |
+| **Recover from a database failure** (no refetch) | `python -m src.main --reload-raw --hour 2026-10-16T09:00:00+05:30` |
 | Full missing-slot story for the evidence pack | `python -m src.main --demo` |
 | Dashboard | `python -m streamlit run src/dashboard/app.py` |
 
-`--hour` accepts any ISO 8601 time (with or without an offset) and is floored to the UTC hour. **`scheduled_hour` is the slot a row belongs to; `time_stamp` is when the page was actually fetched.** A run that starts at 10:59:58 and finishes at 11:00:40 still writes slot 10:00 (see I-8 in `DECISIONS.md`).
+`--hour` accepts any ISO 8601 time (with or without an offset) and is floored to the top of its **IST hour** (slots are IST hours, stored as UTC instants: 10:00 IST = `2026-10-16T04:30:00Z`). **`scheduled_hour` is the slot a row belongs to; `time_stamp` is when the page was actually fetched.** A run that starts at 10:59:58 IST and finishes at 11:00:40 IST still writes the 10:00 IST slot (see I-8 in `DECISIONS.md`).
 
 ## Configure targets
 
@@ -55,7 +55,7 @@ A run takes about one second with the mock. Against a real site the configured p
 
 ## How hourly scheduling works
 
-`--schedule` uses APScheduler: a cron job at minute 0 of every UTC hour (`max_instances=1`, `coalesce=True`) that (1) runs all targets for that hour, then (2) checks the previous hour (its grace period has now passed) and the current hour. Cron or Task Scheduler can call the same one-shot commands instead. Either way a run is **idempotent per hour** and **protected against overlap** by a database lock: a second run that fires while the first is still working is recorded as `skipped_overlap` and fetches nothing; its slot then shows as missing until it is backfilled.
+`--schedule` uses APScheduler: a cron job at the top of every IST hour (minute 30 of the UTC clock) (`max_instances=1`, `coalesce=True`) that (1) runs all targets for that hour, then (2) checks the previous hour (its grace period has now passed) and the current hour. Cron or Task Scheduler can call the same one-shot commands instead. Either way a run is **idempotent per hour** and **protected against overlap** by a database lock: a second run that fires while the first is still working is recorded as `skipped_overlap` and fetches nothing; its slot then shows as missing until it is backfilled.
 
 ## What the pipeline does
 
@@ -116,6 +116,6 @@ Politeness settings that a live adapter would use: 1 request per 2 s (0.5 rps), 
 pytest -q
 ```
 
-74 tests: parser on fixtures, ranks, pagination, upsert/idempotency, empty results, timeout/retry/jitter, rate limiting, malformed payloads, missing slots, every alert trigger, email content, dedupe/cooldown/recovery, SMTP behaviour, raw layout, running/missing states, and one or more tests per curveball. Assertions use exact values (ranks, statuses, row counts, subjects). See [`KNOWN_GAPS.md`](KNOWN_GAPS.md) for what is not covered.
+80 tests: parser on fixtures (including the JSON-LD layer), ranks, pagination, upsert/idempotency, empty results, timeout/retry/jitter, rate limiting, malformed payloads, missing slots, every alert trigger, email content, dedupe/cooldown/recovery, SMTP behaviour, raw layout, running/missing states, and one or more tests per curveball. Assertions use exact values (ranks, statuses, row counts, subjects). See [`KNOWN_GAPS.md`](KNOWN_GAPS.md) for what is not covered.
 
 `screenshots/` is for screenshots **you capture from your own run**; see [`docs/evidence_checklist.md`](docs/evidence_checklist.md).

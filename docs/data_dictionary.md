@@ -1,6 +1,6 @@
 # Data dictionary
 
-All timestamps use ISO 8601 UTC strings ending in `Z` unless the value is explicitly a date parsed from an input fixture. `scheduled_hour` is the UTC hour bucket and `time_stamp` is the response fetch time.
+All timestamps use ISO 8601 UTC strings ending in `Z` unless the value is explicitly a date parsed from an input fixture. `scheduled_hour` is the IST hour slot (stored as a UTC instant) and `time_stamp` is the response fetch time.
 
 ## `visibility_product`
 
@@ -71,4 +71,4 @@ Ranks are assigned in observed top-to-bottom order after duplicate placements wi
 
 ## Time
 
-All stored times are UTC ISO-8601 ending in `Z`. `scheduled_hour` is the UTC hour slot (fixed when the run starts); `time_stamp` is the real fetch time, which can fall in a later hour. IST (UTC+5:30) appears only in dashboards and emails.
+All stored times are UTC ISO-8601 ending in `Z`. `scheduled_hour` is the slot: the top of an IST hour (UTC+5:30) stored as a UTC instant, so 10:00 IST is `...T04:30:00Z` (fixed when the run starts); `time_stamp` is the real fetch time, which can fall in a later hour.

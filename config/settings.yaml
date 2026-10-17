@@ -16,7 +16,7 @@ rate_limit:
   apply_to_mock: false      # the mock does no network I/O; set true to rehearse the live pacing
 grace_period_minutes: 15
 completeness_threshold: 0.98
-timezone: UTC
+timezone: Asia/Kolkata   # slots are IST hours (stored as UTC instants, e.g. 10:00 IST = 04:30Z)
 alerts:
   cooldown_minutes: 60
   parser_error_threshold: 1

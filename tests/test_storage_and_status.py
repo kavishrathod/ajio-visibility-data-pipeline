@@ -9,7 +9,7 @@ from src.pipeline.orchestrator import run_pipeline
 from src.storage.database import Database
 from tests.helpers import ScriptedAdapter, fixture_text, isolated_config, no_sleep, resp
 
-HOUR = "2026-10-16T14:00:00Z"
+HOUR = "2026-10-16T14:30:00Z"
 
 
 def _db(config):
@@ -24,7 +24,7 @@ def test_raw_snapshots_use_platform_date_hour_partitions_with_a_metadata_sidecar
     summary = run_pipeline(config, HOUR, sleeper=no_sleep)
     db = _db(config)
     row = db.query("SELECT raw_payload_ref FROM visibility_product LIMIT 1")[0]
-    prefix = f"data/raw/platform=AJIO/date=2026-10-16/hour=14/{summary['run_id']}/"
+    prefix = f"data/raw/platform=AJIO/date=2026-10-16/hour=20/{summary['run_id']}/"
     assert row["raw_payload_ref"] == prefix + "men_black_jeans__p1.html"
     body = (config.root / row["raw_payload_ref"]).read_text(encoding="utf-8")
     assert "SYNTHETIC MOCK FIXTURE" in body
@@ -58,7 +58,7 @@ def test_orphaned_running_slot_becomes_missing_but_a_live_run_is_left_alone(tmp_
     db.upsert_status({"platform": "AJIO", "target_id": target, "scheduled_hour": HOUR, "status": "running", "expected": 1, "observed": 0,
                       "row_count": 0, "first_seen_at": "2026-10-16T14:00:05Z", "checked_at": "2026-10-16T14:00:05Z", "missing_reason": None,
                       "incident_id": None, "last_run_id": "r1", "parse_error_count": 0, "is_mock": 1})
-    due = datetime(2026, 10, 16, 14, 30, tzinfo=timezone.utc)
+    due = datetime(2026, 10, 16, 15, 0, tzinfo=timezone.utc)
     db.acquire_lock("pipeline:AJIO", "r1")
     assert evaluate_completeness(db, "AJIO", HOUR, 15, 0.98, now=due)["status_counts"] == {"running": 1}
     db.release_lock("pipeline:AJIO", "r1")

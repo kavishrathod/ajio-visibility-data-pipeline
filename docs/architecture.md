@@ -26,7 +26,7 @@ flowchart TD
 
 - **Configuration** is data: keywords, pages, retry, rate, grace and alert settings live in `config/`; secrets only in `.env`.
 - **Adapters** do one thing, fetch a page. Retry, backoff, jitter and rate limiting live outside them (`collectors/fetcher.py`, `collectors/ratelimit.py`) so they are unit-testable. `MockAdapter` has no network code; `AjioAdapter` raises `PermissionError`; `ReplayAdapter` serves stored raw files.
-- **Raw layer (Bronze):** every response is written to disk with a metadata sidecar before the database is touched, partitioned `platform=/date=/hour=/<run_id>/` (UTC). Partitioning by hour matches how the data is queried, reloaded and expired; the run id keeps reruns from overwriting each other.
+- **Raw layer (Bronze):** every response is written to disk with a metadata sidecar before the database is touched, partitioned `platform=/date=/hour=/<run_id>/`, where date and hour are the IST slot (10:00 IST slot -> `date=2026-10-16/hour=10`). Partitioning by hour matches how the data is queried, reloaded and expired; the run id keeps reruns from overwriting each other.
 - **Parsing** separates an explicit no-results marker from a missing grid, and detects blocked/challenge pages. HTTP status is checked first.
 - **Normalisation:** missing or ambiguous values stay NULL. Placement type is part of the dedupe key, so SP and Organic copies of one product are both kept.
 - **Silver:** `visibility_product`, unique on `(platform, target_id, scheduled_hour, absolute_rank)`; a complete parse replaces the slot, a partial one never deletes earlier good rows.
@@ -40,4 +40,4 @@ flowchart TD
 
 ## Scheduling and replay
 
-`--schedule` runs one cycle at start and then at minute 0 of each UTC hour, followed by completeness checks of the previous and current hour. For a backfill pass an explicit hour to `--run-once --hour ...`. For a failed load use `--reload-raw --hour ...`.
+`--schedule` runs one cycle at start and then at the top of each IST hour (minute 30 UTC), followed by completeness checks of the previous and current hour. For a backfill pass an explicit hour to `--run-once --hour ...`. For a failed load use `--reload-raw --hour ...`.

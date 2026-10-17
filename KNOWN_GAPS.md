@@ -1,9 +1,9 @@
 # Known gaps and honest scope
 
 1. **Mock source only.** No live AJIO search is requested: robots.txt disallows `/search` and `/api/*`. The live adapter fails closed. Nothing here is a real AJIO observation, and prices, ranks, ratings, sponsorship labels and campaign ids are synthetic.
-2. **Parser contract is mock-specific.** It covers the fixture/generator structure (`product-grid`, `product-card`, `data-*` attributes), not AJIO's real DOM, and I did not verify how AJIO marks sponsored units.
+2. **Parser contract is half-observed.** The JSON-LD `ItemList` layer (name, image, url, position, numberOfItems) mirrors what was seen in AJIO's page source. The grid layer (`product-grid`, `product-card`, `data-*` attributes carrying price, rating, placement) is simulated: I did not inspect AJIO's rendered DOM and did not verify how AJIO marks sponsored units. JSON-LD positions in the mock restart at 1 on each page; whether AJIO's continue across pages is unverified.
 3. **I-4 is partial.** A placement repeated across pages is detected and handled; a product that disappears from both pages is not detectable without an independent total.
-4. **UTC slots.** IST hours do not align with UTC hour slots (half-hour offset); emails show both. A configurable slot offset is not implemented.
+4. **Fixed IST slots.** Slots are IST hours (UTC+05:30) stored as UTC instants. The offset is a constant in `src/timeutil.py`, not a configuration setting, and IST has no daylight saving so no DST handling exists. Cron on a UTC machine must fire at minute 30.
 5. **Database is a single point of failure for alerting.** Incidents are stored in the same SQLite file. If the database is down before a run starts, the run refuses to start and no incident can be written; production needs an external heartbeat/watchdog. Mid-run outages are handled (raw files kept, `--reload-raw`).
 6. **Single host.** SQLite and one lock row suit a demo. The lock expires after 4 hours, or immediately when its run is marked finished. There is no heartbeat/lease for a hung process.
 7. **Scheduler is foreground or external.** `--schedule` stops if the process stops; stale-data detection only fires when a check runs (the cron example runs one at minute 20). Missed hours are found by the completeness check and backfilled by hand.

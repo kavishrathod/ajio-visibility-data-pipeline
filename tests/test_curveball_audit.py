@@ -28,10 +28,15 @@ def test_same_product_sponsored_and_organic_are_distinct_but_tracking_duplicate_
     assert duplicate_count == 1
 
 
-def test_hour_input_is_normalized_to_utc_hour_boundary():
+def test_hour_input_is_normalized_to_the_ist_hour_boundary():
     from src.pipeline.completeness import format_hour
+    # 10:59:58 IST belongs to the 10:00 IST slot, stored as the UTC instant 04:30Z.
     dt = datetime.fromisoformat("2026-10-16T10:59:58+05:30")
-    assert format_hour(dt) == "2026-10-16T05:00:00Z"
+    assert format_hour(dt) == "2026-10-16T04:30:00Z"
+    # The same instant given as a UTC string maps to the same slot.
+    assert format_hour("2026-10-16T05:29:58Z") == "2026-10-16T04:30:00Z"
+    # 11:00:00 IST is the next slot.
+    assert format_hour("2026-10-16T05:30:00Z") == "2026-10-16T05:30:00Z"
 
 
 def test_missing_slot_becomes_missing_after_grace_period(tmp_path):
@@ -40,8 +45,8 @@ def test_missing_slot_becomes_missing_after_grace_period(tmp_path):
     db.initialize()
     db.ensure_targets(config.targets)
     result = evaluate_completeness(
-        db, config.platform, "2026-10-16T14:00:00Z", grace_period_minutes=15,
-        threshold=0.98, now=datetime(2026, 10, 16, 14, 20, tzinfo=timezone.utc),
+        db, config.platform, "2026-10-16T14:30:00Z", grace_period_minutes=15,
+        threshold=0.98, now=datetime(2026, 10, 16, 14, 50, tzinfo=timezone.utc),
     )
     assert result["due"] is True
     assert result["completed_targets"] == 0

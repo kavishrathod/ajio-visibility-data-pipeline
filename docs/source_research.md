@@ -93,10 +93,13 @@ Per the brief ("if live access is blocked or not permitted, stop, document what 
 | Observed on AJIO | In the mock |
 |---|---|
 | Keyword search via a `/search/?text=` page, default sort Relevance | Targets are keywords; sort order is fixed to relevance; the mock is addressed by keyword and page number, not by URL |
-| Grid of cards with brand, name, image, price | Each card is an `<article class="product-card">` inside `[data-testid="product-grid"]`, with `data-*` attributes for name, price, MRP, rating, count, tag, deal, image, URL |
+| A schema.org JSON-LD `ItemList` embedded in the page source, with `name`, `image`, `url`, `position` per item and `numberOfItems` (28,073) | **Modelled as observed.** Every mock page embeds a `<script type="application/ld+json">` `ItemList` with exactly those fields. The parser takes each product's name, URL and image from it, and records `numberOfItems` |
+| Grid of cards with brand, name, image, price | **Simulated.** Each card is an `<article class="product-card">` inside `[data-testid="product-grid"]`, with `data-*` attributes for price, MRP, rating, count, tag, deal, placement. The JSON-LD does not contain these fields, so this layer is invented; I did not inspect the rendered DOM |
 | An ad component (`jioAds.js`) loaded on the page | Cards carry `data-kind` = `SB`, `SP` or organic, and `data-campaign-id` on paid units. **This marker is invented for the mock; I did not verify how AJIO marks sponsored units** |
 | Result counts such as "28,073 Items Found" | Not modelled. A genuine zero-result page is a grid with no cards and an explicit no-results message |
-| Client-side rendering: skeleton loaders, then fetch calls | **Not modelled.** The mock returns static HTML, which is a simplification. A real client-rendered page could not be parsed this way |
+| Client-side rendering: skeleton loaders, then fetch calls | **Not modelled.** The mock returns static HTML with the grid already present, which is a simplification. The JSON-LD block is the only layer that exists in the page source as observed |
+
+**Design rule that follows from this:** the JSON-LD cannot tell a sponsored unit from an organic one, and has no price. So it is never trusted to decide a page is healthy: a page with JSON-LD but no product grid is `parse_failed` (fixture `layout_changed_jsonld_present.html`, test `test_json_ld_does_not_rescue_a_page_whose_grid_is_missing`). A mismatch between the JSON-LD and the grid (different product at the same position, or different item counts) is logged as a parser warning.
 
 The mock cannot support any claim about real AJIO ranking, prices, ratings or campaigns: they are simulated.
 

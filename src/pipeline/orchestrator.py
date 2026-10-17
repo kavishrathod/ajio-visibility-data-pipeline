@@ -23,6 +23,7 @@ from src.config import AppConfig
 from src.logger import get_logger
 from src.parsers.product_parser import ProductUnit, parse_products
 from src.pipeline.completeness import format_hour
+from src.timeutil import IST, parse_utc
 from src.pipeline.ranking import assign_ranks
 from src.pipeline.validator import find_cross_page_duplicates, validate_units
 from src.storage.database import Database, utc_now_iso
@@ -57,9 +58,10 @@ def _rate_limiter(config: AppConfig, adapter: Adapter, sleeper):
 
 
 def _raw_dir(scheduled_hour: str, platform: str, run_id: str) -> Path:
-    """data/raw/platform=<p>/date=<YYYY-MM-DD>/hour=<HH>/<run_id>/ (UTC)."""
-    day, clock = scheduled_hour.split("T")
-    return Path("data") / "raw" / f"platform={platform}" / f"date={day}" / f"hour={clock[:2]}" / run_id
+    """data/raw/platform=<p>/date=<YYYY-MM-DD>/hour=<HH>/<run_id>/ (date and hour are the IST slot)."""
+    slot_ist = parse_utc(scheduled_hour).astimezone(IST)
+    return (Path("data") / "raw" / f"platform={platform}" / f"date={slot_ist:%Y-%m-%d}"
+            / f"hour={slot_ist:%H}" / run_id)
 
 
 def _write_raw_file(config: AppConfig, run_id: str, keyword: str, response: RawResponse, scheduled_hour: str) -> tuple[str, str]:

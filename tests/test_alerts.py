@@ -7,8 +7,8 @@ from src.pipeline.orchestrator import run_pipeline
 from src.storage.database import Database
 from tests.helpers import FakeMailer, ScriptedAdapter, fixture_text, isolated_config, no_sleep, resp
 
-HOUR = "2026-10-16T14:00:00Z"
-DUE = datetime(2026, 10, 16, 14, 20, tzinfo=timezone.utc)
+HOUR = "2026-10-16T14:30:00Z"
+DUE = datetime(2026, 10, 16, 14, 50, tzinfo=timezone.utc)
 
 
 def _db(config):
@@ -33,14 +33,14 @@ def test_run_failed_alert_has_all_required_email_fields(tmp_path):
     assert result["conditions"][0] == "run_failed"
     assert result["alert_state"] == "sent"
     subject, body = mailer.sent[0]
-    assert subject == "[AJIO VISIBILITY][CRITICAL] Run failed — 2026-10-16 14:00 UTC (2026-10-16 19:30 IST)"
+    assert subject == "[AJIO VISIBILITY][CRITICAL] Run failed — 2026-10-16 14:30 UTC (2026-10-16 20:00 IST)"
     assert "Platform:             AJIO" in body
     assert f"Run ID:               {summary['run_id']}" in body
     assert "0 observed complete" in body and "2 expected target-hours" in body
-    assert "First detected:       2026-10-16T14:20:00Z" in body
+    assert "First detected:       2026-10-16T14:50:00Z" in body
     assert "http://localhost:8501" in body
     assert "Fetch failed after 3 attempts" in body  # reason
-    assert "Next step:" in body and "--hour 2026-10-16T14:00:00Z" in body
+    assert "Next step:" in body and "--hour 2026-10-16T14:30:00Z" in body
     assert "- men black jeans: failed" in body and "- women handbag: failed" in body
 
 
@@ -74,7 +74,7 @@ def test_missing_slots_and_completeness_alert_when_nothing_ran(tmp_path):
     result = check_hour(_db(config), config, HOUR, now=DUE, mailer=mailer)
     assert result["conditions"] == ["missing_slots", "completeness"]
     subject, body = mailer.sent[0]
-    assert subject.startswith("[AJIO VISIBILITY][CRITICAL] Missing data — 2026-10-16 14:00 UTC")
+    assert subject.startswith("[AJIO VISIBILITY][CRITICAL] Missing data — 2026-10-16 14:30 UTC")
     assert "no run recorded for this hour" in body
     assert "grace period" in body
 
@@ -82,7 +82,7 @@ def test_missing_slots_and_completeness_alert_when_nothing_ran(tmp_path):
 def test_not_due_before_grace_period_sends_nothing(tmp_path):
     config = isolated_config(tmp_path, ["men black jeans"])
     mailer = FakeMailer()
-    result = check_hour(_db(config), config, HOUR, now=datetime(2026, 10, 16, 14, 5, tzinfo=timezone.utc), mailer=mailer)
+    result = check_hour(_db(config), config, HOUR, now=datetime(2026, 10, 16, 14, 35, tzinfo=timezone.utc), mailer=mailer)
     assert result["alert_state"] == "not_due"
     assert mailer.sent == []
 
@@ -94,16 +94,16 @@ def _run_hour(config, hour, adapter=None):
 def test_row_count_drop_against_rolling_baseline(tmp_path):
     config = isolated_config(tmp_path, ["men black jeans"])
     generated = MockAdapter(config.root / "tests" / "fixtures", generate=True)
-    for hour in ("2026-10-16T08:00:00Z", "2026-10-16T09:00:00Z", "2026-10-16T10:00:00Z"):
+    for hour in ("2026-10-16T08:30:00Z", "2026-10-16T09:30:00Z", "2026-10-16T10:30:00Z"):
         assert _run_hour(config, hour, generated)["rows_written_or_upserted"] == 35
 
     def small(keyword, page, n):
         return resp(fixture_text("small_page.html")) if page == 1 else resp(fixture_text("zero_results.html"), page=2)
 
-    summary = _run_hour(config, "2026-10-16T11:00:00Z", ScriptedAdapter(small))
+    summary = _run_hour(config, "2026-10-16T11:30:00Z", ScriptedAdapter(small))
     assert summary["rows_written_or_upserted"] == 2
     mailer = FakeMailer()
-    result = check_hour(_db(config), config, "2026-10-16T11:00:00Z", now=datetime(2026, 10, 16, 11, 30, tzinfo=timezone.utc), mailer=mailer)
+    result = check_hour(_db(config), config, "2026-10-16T11:30:00Z", now=datetime(2026, 10, 16, 12, 0, tzinfo=timezone.utc), mailer=mailer)
     assert result["conditions"] == ["row_drop"]
     assert "wrote 2 rows; the rolling median of the last 3 comparable runs is 35" in mailer.sent[0][1]
 
@@ -111,14 +111,14 @@ def test_row_count_drop_against_rolling_baseline(tmp_path):
 def test_no_row_drop_alert_without_enough_baseline(tmp_path):
     config = isolated_config(tmp_path, ["men black jeans"])
     generated = MockAdapter(config.root / "tests" / "fixtures", generate=True)
-    for hour in ("2026-10-16T08:00:00Z", "2026-10-16T09:00:00Z"):
+    for hour in ("2026-10-16T08:30:00Z", "2026-10-16T09:30:00Z"):
         _run_hour(config, hour, generated)
 
     def small(keyword, page, n):
         return resp(fixture_text("small_page.html")) if page == 1 else resp(fixture_text("zero_results.html"), page=2)
 
-    _run_hour(config, "2026-10-16T11:00:00Z", ScriptedAdapter(small))
-    result = check_hour(_db(config), config, "2026-10-16T11:00:00Z", now=datetime(2026, 10, 16, 11, 30, tzinfo=timezone.utc), mailer=FakeMailer())
+    _run_hour(config, "2026-10-16T11:30:00Z", ScriptedAdapter(small))
+    result = check_hour(_db(config), config, "2026-10-16T11:30:00Z", now=datetime(2026, 10, 16, 12, 0, tzinfo=timezone.utc), mailer=FakeMailer())
     assert result["conditions"] == []
 
 

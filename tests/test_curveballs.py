@@ -16,8 +16,8 @@ from src.storage.database import Database
 from src.timeutil import ist_label
 from tests.helpers import FakeMailer, ScriptedAdapter, fixture_text, isolated_config, no_sleep, resp
 
-HOUR = "2026-10-16T14:00:00Z"
-DUE = datetime(2026, 10, 16, 14, 20, tzinfo=timezone.utc)
+HOUR = "2026-10-16T14:30:00Z"
+DUE = datetime(2026, 10, 16, 14, 50, tzinfo=timezone.utc)
 
 
 def _db(config):
@@ -112,20 +112,25 @@ def test_i7_bot_challenge_page_with_http_200_is_blocked_not_zero_result(tmp_path
 # ---------------------------------------------------------------- I-8 hour boundary
 def test_i8_late_run_keeps_its_scheduled_slot(tmp_path):
     config = isolated_config(tmp_path, ["men black jeans"])
-    # The slot is 10:00 UTC. Pages are fetched at 11:00:40 UTC, after the boundary.
-    late = ScriptedAdapter(lambda kw, page, n: resp(fixture_text("small_page.html"), fetched_at="2026-10-16T11:00:40Z") if page == 1 else resp(fixture_text("zero_results.html"), fetched_at="2026-10-16T11:00:41Z", page=2))
-    summary = run_pipeline(config, "2026-10-16T10:59:58Z", adapter_override=late, sleeper=no_sleep)
+    # Brief scenario: the 10:00 IST run starts at 10:59:58 IST (05:29:58Z, the server clock is UTC)
+    # and its pages are fetched at 11:00:40 IST (05:30:40Z), after the next IST hour has begun.
+    late = ScriptedAdapter(lambda kw, page, n: resp(fixture_text("small_page.html"), fetched_at="2026-10-16T05:30:40Z") if page == 1 else resp(fixture_text("zero_results.html"), fetched_at="2026-10-16T05:30:41Z", page=2))
+    summary = run_pipeline(config, "2026-10-16T05:29:58Z", adapter_override=late, sleeper=no_sleep)
     db = _db(config)
     rows = db.query("SELECT scheduled_hour, time_stamp FROM visibility_product")
-    assert summary["scheduled_hour"] == "2026-10-16T10:00:00Z"
-    assert {(r["scheduled_hour"], r["time_stamp"]) for r in rows} == {("2026-10-16T10:00:00Z", "2026-10-16T11:00:40Z")}
-    assert db.query("SELECT COUNT(*) AS n FROM visibility_product WHERE scheduled_hour='2026-10-16T11:00:00Z'")[0]["n"] == 0
-    assert db.query("SELECT scheduled_hour FROM target_hour_status")[0]["scheduled_hour"] == "2026-10-16T10:00:00Z"
+    slot_10_ist = "2026-10-16T04:30:00Z"  # 10:00 IST
+    slot_11_ist = "2026-10-16T05:30:00Z"  # 11:00 IST
+    assert summary["scheduled_hour"] == slot_10_ist
+    assert {(r["scheduled_hour"], r["time_stamp"]) for r in rows} == {(slot_10_ist, "2026-10-16T05:30:40Z")}
+    assert db.query("SELECT COUNT(*) AS n FROM visibility_product WHERE scheduled_hour=?", (slot_11_ist,))[0]["n"] == 0
+    assert db.query("SELECT scheduled_hour FROM target_hour_status")[0]["scheduled_hour"] == slot_10_ist
+    assert ist_label(slot_10_ist) == "2026-10-16 10:00 IST"
 
 
-def test_i8_ist_input_maps_to_the_correct_utc_slot():
-    assert format_hour("2026-10-16T16:29:58+05:30") == "2026-10-16T10:00:00Z"  # 10:59:58 UTC
-    assert ist_label("2026-10-16T10:00:00Z") == "2026-10-16 15:30 IST"
+def test_i8_ist_input_maps_to_the_ist_slot():
+    assert format_hour("2026-10-16T10:59:58+05:30") == "2026-10-16T04:30:00Z"
+    assert format_hour("2026-10-16T11:00:00+05:30") == "2026-10-16T05:30:00Z"
+    assert ist_label("2026-10-16T04:30:00Z") == "2026-10-16 10:00 IST"
 
 
 # ---------------------------------------------------------------- I-9 overlapping runs
@@ -141,10 +146,10 @@ def test_i9_second_run_is_recorded_as_skipped_while_first_is_running(tmp_path):
         return resp(fixture_text("small_page.html")) if page == 1 else resp(fixture_text("zero_results.html"), page=2)
 
     first = {}
-    worker = threading.Thread(target=lambda: first.update(run_pipeline(config, "2026-10-16T10:00:00Z", trigger="scheduled", adapter_override=ScriptedAdapter(slow), sleeper=no_sleep)))
+    worker = threading.Thread(target=lambda: first.update(run_pipeline(config, "2026-10-16T10:30:00Z", trigger="scheduled", adapter_override=ScriptedAdapter(slow), sleeper=no_sleep)))
     worker.start()
     assert entered.wait(10)
-    second = run_pipeline(config, "2026-10-16T11:00:00Z", trigger="scheduled", adapter_override=ScriptedAdapter(slow), sleeper=no_sleep)
+    second = run_pipeline(config, "2026-10-16T11:30:00Z", trigger="scheduled", adapter_override=ScriptedAdapter(slow), sleeper=no_sleep)
     assert second["status"] == "skipped_overlap" and second["rows_written_or_upserted"] == 0
     assert calls == [("men black jeans", 1)]  # the second run never fetched the target
     gate.set()
@@ -152,10 +157,10 @@ def test_i9_second_run_is_recorded_as_skipped_while_first_is_running(tmp_path):
     assert first["status"] == "success"
     db = _db(config)
     runs = {r["scheduled_hour"]: r for r in db.query("SELECT * FROM scrape_run")}
-    assert runs["2026-10-16T10:00:00Z"]["status"] == "success"
-    assert runs["2026-10-16T11:00:00Z"]["status"] == "skipped_overlap"
-    assert first["run_id"] in runs["2026-10-16T11:00:00Z"]["error_summary"]
-    assert db.query("SELECT COUNT(*) AS n FROM visibility_product WHERE scheduled_hour='2026-10-16T11:00:00Z'")[0]["n"] == 0
+    assert runs["2026-10-16T10:30:00Z"]["status"] == "success"
+    assert runs["2026-10-16T11:30:00Z"]["status"] == "skipped_overlap"
+    assert first["run_id"] in runs["2026-10-16T11:30:00Z"]["error_summary"]
+    assert db.query("SELECT COUNT(*) AS n FROM visibility_product WHERE scheduled_hour='2026-10-16T11:30:00Z'")[0]["n"] == 0
 
 
 def test_i9_skipped_slot_shows_up_as_missing_and_alerts(tmp_path):
@@ -176,8 +181,8 @@ def test_i10_late_backfill_fills_slot_resolves_alert_and_sends_one_recovery(tmp_
     config = isolated_config(tmp_path, ["men black jeans"])
     db = _db(config)
     mailer = FakeMailer()
-    nine = "2026-10-16T09:00:00Z"
-    assert check_hour(db, config, nine, now=datetime(2026, 10, 16, 13, 0, tzinfo=timezone.utc), mailer=mailer)["alert_state"] == "sent"
+    nine = "2026-10-16T09:30:00Z"
+    assert check_hour(db, config, nine, now=datetime(2026, 10, 16, 13, 30, tzinfo=timezone.utc), mailer=mailer)["alert_state"] == "sent"
     assert db.query("SELECT status FROM target_hour_status")[0]["status"] == "missing"
 
     first = run_pipeline(config, nine, trigger="backfill", sleeper=no_sleep)
@@ -187,8 +192,8 @@ def test_i10_late_backfill_fills_slot_resolves_alert_and_sends_one_recovery(tmp_
     assert {r["scheduled_hour"] for r in db.query("SELECT scheduled_hour FROM visibility_product")} == {nine}
     assert first["trigger"] == "backfill"
 
-    assert check_hour(db, config, nine, now=datetime(2026, 10, 16, 13, 5, tzinfo=timezone.utc), mailer=mailer)["alert_state"] == "resolved"
-    assert check_hour(db, config, nine, now=datetime(2026, 10, 16, 13, 6, tzinfo=timezone.utc), mailer=mailer)["alert_state"] == "healthy"
+    assert check_hour(db, config, nine, now=datetime(2026, 10, 16, 13, 35, tzinfo=timezone.utc), mailer=mailer)["alert_state"] == "resolved"
+    assert check_hour(db, config, nine, now=datetime(2026, 10, 16, 13, 36, tzinfo=timezone.utc), mailer=mailer)["alert_state"] == "healthy"
     assert sum("[RECOVERED]" in s for s in mailer.subjects) == 1 and len(mailer.sent) == 2
 
 
@@ -218,7 +223,7 @@ def test_i11_outage_keeps_raw_snapshots_and_reload_needs_no_refetch(tmp_path, mo
     assert summary["status"] == "failed" and summary["completed_targets"] == 0
     assert summary["db_errors"] and "load_failed" in summary["errors"][0]
 
-    raw_dir = config.root / "data" / "raw" / "platform=AJIO" / "date=2026-10-16" / "hour=14"
+    raw_dir = config.root / "data" / "raw" / "platform=AJIO" / "date=2026-10-16" / "hour=20"
     assert len(list(raw_dir.rglob("*.html"))) == 3 and len(list(raw_dir.rglob("*.meta.json"))) == 3  # 2 pages + 1 zero-result page
     db = _db(config)
     assert db.query("SELECT COUNT(*) AS n FROM visibility_product")[0]["n"] == 0
@@ -244,7 +249,7 @@ def test_i11_outage_keeps_raw_snapshots_and_reload_needs_no_refetch(tmp_path, mo
 def test_i11_lock_left_behind_by_a_finished_run_does_not_block_the_next_run(tmp_path):
     config = isolated_config(tmp_path, ["men black jeans"])
     db = _db(config)
-    db.create_run({"run_id": "dead-run", "platform": "AJIO", "scheduled_hour": HOUR, "started_at": "2026-10-16T14:00:00Z",
+    db.create_run({"run_id": "dead-run", "platform": "AJIO", "scheduled_hour": HOUR, "started_at": "2026-10-16T14:30:00Z",
                    "finished_at": "2026-10-16T14:01:00Z", "status": "failed", "trigger": "scheduled", "expected_target_count": 1,
                    "completed_target_count": 0, "row_count": 0, "error_count": 1, "retry_count": 0, "scraper_version": "x",
                    "adapter_mode": "mock", "error_summary": None})

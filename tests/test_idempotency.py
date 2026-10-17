@@ -5,7 +5,7 @@ from tests.helpers import isolated_config
 
 def test_same_hour_rerun_upserts_instead_of_duplicate_rows(tmp_path):
     config = isolated_config(tmp_path, ["men white sneakers"])
-    hour = "2026-10-16T14:00:00Z"
+    hour = "2026-10-16T14:30:00Z"
     first = run_pipeline(config, scheduled_hour=hour, trigger="manual")
     db = Database(config.db_path, config.root)
     first_rows = db.query("SELECT * FROM visibility_product WHERE scheduled_hour=?", (hour,))

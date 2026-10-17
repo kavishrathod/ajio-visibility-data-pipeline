@@ -60,7 +60,7 @@ def test_pipeline_paces_requests_when_rate_limit_applies_to_the_mock(tmp_path):
     config = isolated_config(tmp_path, ["men black jeans"])
     config.settings["rate_limit"].update({"enabled": True, "apply_to_mock": True, "requests_per_second": 2})
     slept = []
-    summary = run_pipeline(config, "2026-10-16T14:00:00Z", sleeper=slept.append)
+    summary = run_pipeline(config, "2026-10-16T14:30:00Z", sleeper=slept.append)
     assert summary["status"] == "success"
     assert len(slept) == 1 and 0 < slept[0] <= 0.5  # 2 requests (pages 1 and 2) -> one wait of up to 1/2 s
     assert summary["rate_limit_wait_seconds"] > 0
@@ -70,5 +70,5 @@ def test_mock_is_not_rate_limited_by_default(tmp_path):
     config = isolated_config(tmp_path, ["men black jeans"])
     config.settings["rate_limit"]["enabled"] = True  # apply_to_mock stays false
     slept = []
-    run_pipeline(config, "2026-10-16T14:00:00Z", sleeper=slept.append)
+    run_pipeline(config, "2026-10-16T14:30:00Z", sleeper=slept.append)
     assert slept == []

@@ -5,9 +5,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from src.storage.database import Database, utc_now_iso
+from src.timeutil import floor_to_slot
 
 
 def parse_hour(value: str | datetime | None = None) -> datetime:
+    """Map any instant to its slot: the top of the IST hour, as an aware UTC datetime."""
     if value is None:
         dt = datetime.now(timezone.utc)
     elif isinstance(value, datetime):
@@ -17,8 +19,7 @@ def parse_hour(value: str | datetime | None = None) -> datetime:
         dt = datetime.fromisoformat(normalized)
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
-    dt = dt.astimezone(timezone.utc).replace(minute=0, second=0, microsecond=0)
-    return dt
+    return floor_to_slot(dt)
 
 
 def format_hour(value: str | datetime | None = None) -> str:

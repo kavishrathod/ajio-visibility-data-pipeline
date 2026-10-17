@@ -19,7 +19,7 @@ from src.monitoring.alerts import check_hour
 from src.pipeline.completeness import format_hour
 from src.pipeline.orchestrator import run_pipeline
 from src.storage.database import Database
-from src.timeutil import ist_label, parse_utc
+from src.timeutil import IST, ist_label, parse_utc
 
 COMPLETE = {"success", "zero_result"}
 COLOURS = {
@@ -49,7 +49,7 @@ with left:
         st.rerun()
 with right:
     st.write(f"**Database:** `{config.db_path.relative_to(config.root) if config.db_path.is_relative_to(config.root) else config.db_path}`")
-    st.write(f"**Latest scheduled hour (UTC):** `{latest_hour}`  ·  {ist_label(latest_hour)}")
+    st.write(f"**Latest scheduled slot:** {ist_label(latest_hour)}  ·  `{latest_hour}` (UTC instant)")
 if "last_run_summary" in st.session_state:
     st.json(st.session_state["last_run_summary"])
 
@@ -71,7 +71,7 @@ if latest_run and latest_run[0]["finished_at"]:
 
 m1, m2, m3, m4, m5 = st.columns(5)
 m1.metric("Latest run status", latest_run[0]["status"] if latest_run else "Not run")
-m2.metric("Last successful hour (UTC)", last_ok[0]["scheduled_hour"][:16].replace("T", " ") if last_ok else "none")
+m2.metric("Last successful slot (IST)", ist_label(last_ok[0]["scheduled_hour"]) if last_ok else "none")
 m3.metric("Latest run duration / rows", f"{duration} / {latest_run[0]['row_count']}" if latest_run else "—")
 m4.metric("Expected / complete / missing", f"{expected} / {complete} / {missing}")
 m5.metric("Open alert incidents", int(open_incidents), delta="ALERTING" if open_incidents else "clear", delta_color="inverse")
@@ -80,7 +80,7 @@ if latest_run and latest_run[0]["error_summary"]:
     with st.expander(f"Error summary for the latest run ({latest_run[0]['error_count']} error(s))"):
         st.code(latest_run[0]["error_summary"])
 
-hour_choice = st.text_input("Check completeness for UTC hour", value=latest_hour)
+hour_choice = st.text_input("Check completeness for slot (any ISO time; floored to its IST hour)", value=latest_hour)
 if st.button("Evaluate completeness and process alert"):
     st.session_state["completeness_result"] = check_hour(db, config, hour_choice)
 if "completeness_result" in st.session_state:
@@ -151,11 +151,11 @@ with grid_tab:
         grid_df = grid_df[grid_df["scheduled_hour"].isin(latest_hours)]
         coverage = grid_df.pivot_table(index="keyword", columns="scheduled_hour", values="status", aggfunc="last", dropna=False)
         coverage = coverage.reindex(columns=sorted(latest_hours)).fillna("missing")
-        coverage.columns = [c[5:16].replace("T", " ") for c in coverage.columns]  # MM-DD HH (UTC)
+        coverage.columns = [parse_utc(c).astimezone(IST).strftime("%m-%d %H:00") for c in coverage.columns]  # MM-DD HH (IST slot)
         paint = lambda v: f"background-color: {COLOURS.get(v, '#333')}; color: white"
         styled = coverage.style.map(paint) if hasattr(coverage.style, "map") else coverage.style.applymap(paint)
         st.dataframe(styled, use_container_width=True, height=620)
         st.write("**Status totals:**", grid_df["status"].value_counts().to_dict())
-        st.caption("Column labels are UTC hours (MM-DD HH).")
+        st.caption("Column labels are IST hour slots (MM-DD HH).")
     else:
         st.info("No target-hour status records yet. Run the mock pipeline or evaluate completeness to populate the grid.")

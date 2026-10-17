@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from src.config import load_config
 from src.logger import get_logger
 from src.monitoring.alerts import check_hour
-from src.pipeline.completeness import format_hour
+from src.pipeline.completeness import format_hour, parse_hour
 from src.pipeline.orchestrator import reload_raw, run_pipeline
 from src.storage.database import Database
 
@@ -42,7 +42,7 @@ def _demo(config) -> None:
     The completeness check flags H-2 and sends one alert; the backfill then fills it and the
     next check resolves the incident with exactly one recovery email.
     """
-    now_floor = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+    now_floor = parse_hour(datetime.now(timezone.utc))
     h3, h2, h1 = (format_hour(now_floor - timedelta(hours=n)) for n in (3, 2, 1))
     print(f"== Demo: collect {h3} and {h1}; skip {h2} on purpose ==")
     for hour in (h3, h1):
@@ -61,11 +61,11 @@ def _demo(config) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="AJIO visibility pipeline (mock data by default)")
     parser.add_argument("--run-once", action="store_true", help="run every configured target for one hour")
-    parser.add_argument("--schedule", action="store_true", help="run immediately, then at the top of every UTC hour")
+    parser.add_argument("--schedule", action="store_true", help="run immediately, then at the top of every IST hour (minute 30 UTC)")
     parser.add_argument("--check-completeness", action="store_true", help="materialize missing slots, evaluate triggers, process the incident/alert")
     parser.add_argument("--reload-raw", action="store_true", help="re-parse and load an hour from stored raw snapshots (no fetching); needs --hour")
     parser.add_argument("--demo", action="store_true", help="demonstrate a missing slot, its alert, a late backfill and the recovery email")
-    parser.add_argument("--hour", help="target hour in UTC, e.g. 2026-10-16T14:00:00Z")
+    parser.add_argument("--hour", help="target slot (top of an IST hour), e.g. 2026-10-16T10:00:00+05:30; any instant is floored to its IST hour")
     parser.add_argument("--trigger", choices=["scheduled", "manual", "backfill"], help="override the recorded trigger (cron uses 'scheduled')")
     parser.add_argument("--backfill-hours", type=int, default=0, help="run the last N completed hourly slots")
     parser.add_argument("--keyword", action="append", help="limit a run to a configured keyword; may be repeated")
@@ -93,7 +93,7 @@ def main() -> None:
     if args.backfill_hours:
         if args.backfill_hours < 1 or args.backfill_hours > 168:
             parser.error("--backfill-hours must be between 1 and 168")
-        now_floor = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        now_floor = parse_hour(datetime.now(timezone.utc))
         for offset in range(args.backfill_hours, 0, -1):
             _run_one(config, format_hour(now_floor - timedelta(hours=offset)), "backfill", args.keyword)
         return
@@ -122,7 +122,8 @@ def main() -> None:
 
         scheduler = BlockingScheduler(timezone="UTC")
         # max_instances=1 stops APScheduler overlapping itself; the database lock also protects separate processes.
-        scheduler.add_job(scheduled_job, "cron", minute=0, id="hourly-ajio-pipeline", max_instances=1, coalesce=True, misfire_grace_time=600)
+        # IST is UTC+05:30, so the top of an IST hour is minute 30 of the UTC clock.
+        scheduler.add_job(scheduled_job, "cron", minute=30, id="hourly-ajio-pipeline", max_instances=1, coalesce=True, misfire_grace_time=600)
         scheduled_job()
         logger.info("Hourly scheduler running in foreground; press Ctrl+C to stop")
         try:
