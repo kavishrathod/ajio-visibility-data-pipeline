@@ -244,7 +244,8 @@ def run_pipeline(
                     parsed = parse_products(response.body, response.http_status)
                 except FetchExhausted as exc:
                     target_retries += exc.retry_count
-                    terminal_status = "failed"
+                    # Earlier pages parsed fine: keep them and say so, as for a later parse failure.
+                    terminal_status = "partial" if entries else "failed"
                     reason = str(exc)
                     errors.append(f"{keyword}: {reason}")
                     break

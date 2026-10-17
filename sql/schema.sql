@@ -127,3 +127,70 @@ CREATE TABLE IF NOT EXISTS pipeline_lock (
   run_id TEXT NOT NULL,
   acquired_at TEXT NOT NULL
 );
+
+-- ---------------------------------------------------------------------------
+-- GOLD layer: read-only views over Silver (visibility_product) and the status
+-- ledger (target_hour_status). Views, not tables: they are always consistent
+-- with the data, rerunning an hour or a backfill needs no refresh job, and
+-- they cannot hold duplicates. DROP + CREATE keeps older local databases current.
+-- ---------------------------------------------------------------------------
+DROP VIEW IF EXISTS gold_keyword_hour;
+CREATE VIEW gold_keyword_hour AS
+SELECT
+  s.platform,
+  s.target_id,
+  t.target_value                                              AS keyword,
+  s.scheduled_hour,
+  s.status,
+  COUNT(p.absolute_rank)                                      AS total_units,
+  COALESCE(SUM(p.product_type = 'Organic'), 0)                AS organic_units,
+  COALESCE(SUM(p.product_type = 'SP'), 0)                     AS sp_units,
+  COALESCE(SUM(p.product_type = 'SB'), 0)                     AS sb_units,
+  ROUND(100.0 * COALESCE(SUM(p.product_type IN ('SP', 'SB')), 0)
+        / NULLIF(COUNT(p.absolute_rank), 0), 1)               AS paid_share_pct,
+  COUNT(DISTINCT p.product_id)                                AS distinct_products,
+  MIN(p.sp)                                                   AS min_sp,
+  ROUND(AVG(p.sp), 2)                                         AS avg_sp,
+  MAX(p.sp)                                                   AS max_sp,
+  ROUND(AVG(p.rating), 2)                                     AS avg_rating
+FROM target_hour_status s
+JOIN scrape_target t ON t.target_id = s.target_id
+LEFT JOIN visibility_product p
+       ON p.platform = s.platform AND p.target_id = s.target_id AND p.scheduled_hour = s.scheduled_hour
+GROUP BY s.platform, s.target_id, s.scheduled_hour;
+
+-- Organic rank vs sponsored placements for the same product, per keyword and hour.
+-- A product with both ranks set was shown as organic and as a paid unit on one page (I-6).
+DROP VIEW IF EXISTS gold_product_placement;
+CREATE VIEW gold_product_placement AS
+SELECT
+  platform,
+  target_id,
+  keyword,
+  scheduled_hour,
+  product_id,
+  MIN(CASE WHEN product_type = 'Organic' THEN relative_rank END) AS best_organic_rank,
+  MIN(CASE WHEN product_type = 'SP'      THEN relative_rank END) AS best_sp_rank,
+  SUM(product_type = 'Organic')                                   AS organic_placements,
+  SUM(product_type = 'SP')                                        AS sp_placements
+FROM visibility_product
+WHERE product_id IS NOT NULL
+GROUP BY platform, target_id, scheduled_hour, product_id;
+
+-- One row per platform-hour: coverage and volume. Reflects materialised statuses,
+-- so run --check-completeness for an hour to turn never-run targets into 'missing'.
+DROP VIEW IF EXISTS gold_hour_summary;
+CREATE VIEW gold_hour_summary AS
+SELECT
+  platform,
+  scheduled_hour,
+  COUNT(*)                                                        AS targets,
+  SUM(status IN ('success', 'zero_result'))                       AS complete,
+  SUM(status = 'zero_result')                                     AS zero_result,
+  SUM(status = 'missing')                                         AS missing,
+  SUM(status IN ('failed', 'parse_failed', 'blocked', 'partial')) AS problem,
+  SUM(status IN ('running', 'not_yet_due'))                       AS pending,
+  SUM(row_count)                                                  AS rows,
+  ROUND(100.0 * SUM(status IN ('success', 'zero_result')) / COUNT(*), 1) AS completeness_pct
+FROM target_hour_status
+GROUP BY platform, scheduled_hour;

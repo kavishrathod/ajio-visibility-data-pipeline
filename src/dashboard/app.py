@@ -86,7 +86,7 @@ if st.button("Evaluate completeness and process alert"):
 if "completeness_result" in st.session_state:
     st.json(st.session_state["completeness_result"])
 
-run_tab, product_tab, status_tab, alert_tab, grid_tab = st.tabs(["Run history", "Visibility products", "Target-hour status", "Alert incidents", "Coverage grid"])
+run_tab, product_tab, status_tab, alert_tab, grid_tab, gold_tab = st.tabs(["Run history", "Visibility products", "Target-hour status", "Alert incidents", "Coverage grid", "Gold aggregates"])
 
 with run_tab:
     runs = db.query(
@@ -159,3 +159,34 @@ with grid_tab:
         st.caption("Column labels are IST hour slots (MM-DD HH).")
     else:
         st.info("No target-hour status records yet. Run the mock pipeline or evaluate completeness to populate the grid.")
+
+with gold_tab:
+    st.subheader("Gold aggregates")
+    st.caption("SQL views over Silver and the status ledger (sql/schema.sql). Mock data only.")
+    st.markdown("**Hourly coverage and volume** (`gold_hour_summary`)")
+    summary_df = pd.DataFrame(db.query(
+        "SELECT * FROM gold_hour_summary WHERE platform=? ORDER BY scheduled_hour DESC LIMIT 48", (config.platform,)))
+    if summary_df.empty:
+        st.info("No hours collected yet.")
+    else:
+        summary_df.insert(1, "slot_ist", [ist_label(h) for h in summary_df["scheduled_hour"]])
+        st.dataframe(summary_df, use_container_width=True, hide_index=True)
+
+    st.markdown("**Per keyword and hour: unit mix and price spread** (`gold_keyword_hour`)")
+    gold_hours = [r["scheduled_hour"] for r in db.query(
+        "SELECT DISTINCT scheduled_hour FROM gold_keyword_hour WHERE platform=? ORDER BY scheduled_hour DESC LIMIT 48", (config.platform,))]
+    if gold_hours:
+        gold_hour = st.selectbox("Slot", gold_hours, format_func=ist_label, key="gold_hour")
+        kw_df = pd.DataFrame(db.query(
+            "SELECT keyword, status, total_units, organic_units, sp_units, sb_units, paid_share_pct, distinct_products, "
+            "min_sp, avg_sp, max_sp, avg_rating FROM gold_keyword_hour WHERE platform=? AND scheduled_hour=? ORDER BY keyword",
+            (config.platform, gold_hour)))
+        st.dataframe(kw_df, use_container_width=True, hide_index=True)
+
+        st.markdown("**Products shown both as organic and sponsored** (`gold_product_placement`)")
+        both_df = pd.DataFrame(db.query(
+            "SELECT keyword, product_id, best_organic_rank, best_sp_rank, organic_placements, sp_placements "
+            "FROM gold_product_placement WHERE platform=? AND scheduled_hour=? "
+            "AND best_organic_rank IS NOT NULL AND best_sp_rank IS NOT NULL ORDER BY keyword, best_sp_rank",
+            (config.platform, gold_hour)))
+        st.dataframe(both_df, use_container_width=True, hide_index=True)
