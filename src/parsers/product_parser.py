@@ -43,7 +43,7 @@ class ProductUnit:
     num_of_rating: Optional[int] = None
     tag: str = ""
     deal: str = ""
-    product_image_u: Optional[str] = None
+    product_image_url: Optional[str] = None
     campaign_id: Optional[str] = None
 
 
@@ -267,7 +267,7 @@ def parse_products(body: str, http_status: int = 200) -> ParseResult:
             num_of_rating=parse_count(_field(card, "data-rating-count", "[data-testid='rating-count']")),
             tag=_field(card, "data-tag") or "",
             deal=_field(card, "data-deal") or "",
-            product_image_u=image_url,
+            product_image_url=image_url,
             campaign_id=_field(card, "data-campaign-id"),
         ))
 

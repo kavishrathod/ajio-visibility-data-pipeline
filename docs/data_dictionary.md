@@ -17,7 +17,7 @@ All timestamps use ISO 8601 UTC strings ending in `Z` unless the value is explic
 | `num_of_rating` | Parsed rating count; `K` and `M` suffixes are normalized to integers. |
 | `tag` | Optional label such as bestseller/new. |
 | `deal` | Optional deal text. |
-| `product_image_u` | Product or banner image URL as named in the assessment fields. |
+| `product_image_url` | Product or banner image URL as named in the assessment fields. |
 | `absolute_rank` | Unique display position across all placements and pages for a keyword-hour. |
 | `relative_rank` | Position within the same type (`Organic`, `SP`, or `SB`). |
 | `product_type` | `Organic`, `SP` (sponsored product), or `SB` (sponsored brand/banner). Placement labels are synthetic in this mock project. |

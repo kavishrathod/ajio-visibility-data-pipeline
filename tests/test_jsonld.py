@@ -20,7 +20,7 @@ def test_identity_comes_from_json_ld_when_cards_do_not_carry_it():
     # Banner is not in the ItemList: it keeps its own name and has no product URL.
     assert (sb.product_name, sb.product_url, sb.campaign_id) == ("Mock Brand Banner", None, "MOCK-CMP-777")
     # Products: name, url and image are filled from JSON-LD, money comes from the grid.
-    assert (sp.product_name, sp.product_image_u) == ("Mock Brand Sneaker A", "https://example.invalid/img/920000001.jpg")
+    assert (sp.product_name, sp.product_image_url) == ("Mock Brand Sneaker A", "https://example.invalid/img/920000001.jpg")
     assert sp.product_url == "https://www.ajio.com/mock-brand-sneaker-a/p/920000001_white?itm_source=search"
     assert (sp.sp, sp.mrp, sp.num_of_rating, sp.campaign_id) == ("1299.00", "2599.00", 1200, "MOCK-CMP-778")
     assert (org_b.product_name, org_b.sp, org_b.mrp, org_b.num_of_rating) == ("Mock Brand Sneaker B", "1499.00", None, 1234)
@@ -69,4 +69,4 @@ def test_generated_pages_publish_identity_only_in_json_ld():
     result = parse_products(page)
     assert result.status == "ok" and result.total_items == 34
     products = [u for u in result.units if u.product_type != "SB"]
-    assert products and all(u.product_name and u.product_url and u.product_image_u for u in products)
+    assert products and all(u.product_name and u.product_url and u.product_image_url for u in products)

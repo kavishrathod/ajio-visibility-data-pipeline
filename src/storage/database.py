@@ -158,7 +158,7 @@ class Database:
         records = list(records)
         fields = (
             "time_stamp", "platform", "platform_code", "keyword", "product_name", "sp", "mrp", "rating",
-            "num_of_rating", "tag", "deal", "product_image_u", "absolute_rank", "relative_rank", "product_type",
+            "num_of_rating", "tag", "deal", "product_image_url", "absolute_rank", "relative_rank", "product_type",
             "campaign_id", "product_id", "product_url", "run_id", "target_id", "scheduled_hour", "page_number",
             "raw_payload_ref", "parse_status", "is_mock",
         )

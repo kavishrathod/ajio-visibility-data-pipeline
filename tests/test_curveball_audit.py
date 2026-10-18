@@ -12,7 +12,7 @@ def unit(product_type, product_id="sku-1", url="https://example.test/p/sku-1?tra
     return ProductUnit(
         product_id=product_id, product_url=url, product_name="Sample product", sp="1299.00",
         mrp="1999.00", rating=4.2, num_of_rating=1200, tag="", deal="",
-        product_image_u="https://example.test/image.jpg", product_type=product_type,
+        product_image_url="https://example.test/image.jpg", product_type=product_type,
         campaign_id=campaign_id,
     )
 

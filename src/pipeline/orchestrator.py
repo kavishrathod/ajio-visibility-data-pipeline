@@ -349,7 +349,7 @@ def run_pipeline(
                     "num_of_rating": unit.num_of_rating,
                     "tag": unit.tag,
                     "deal": unit.deal,
-                    "product_image_u": unit.product_image_u,
+                    "product_image_url": unit.product_image_url,
                     "absolute_rank": absolute_rank,
                     "relative_rank": relative_rank,
                     "product_type": unit.product_type,

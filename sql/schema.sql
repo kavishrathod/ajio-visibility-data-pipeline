@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS visibility_product (
   num_of_rating INTEGER,
   tag TEXT NOT NULL DEFAULT '',
   deal TEXT NOT NULL DEFAULT '',
-  product_image_u TEXT,
+  product_image_url TEXT,
   absolute_rank INTEGER NOT NULL,
   relative_rank INTEGER NOT NULL,
   product_type TEXT NOT NULL CHECK (product_type IN ('Organic','SP','SB')),
