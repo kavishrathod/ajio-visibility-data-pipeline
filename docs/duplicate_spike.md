@@ -52,3 +52,8 @@ Quarantine tab and the raw pages.
 ## Limits
 Only duplicates removed by deduplication are counted; records rejected for other reasons are in the quarantine tables.
 The check looks at one hour at a time, with no seasonality.
+
+
+## Reproducible dashboard demonstration
+
+I use `python -m scripts.demo_duplicate_spike` to create a controlled duplicate-spike incident in a separate demo database. The script uses a fake mailer and does not send real email or change the main pipeline database. I open that database in a separate Streamlit process by setting `DB_PATH` for that process. The dashboard evidence is saved as `screenshots/15_duplicate_spike_incident.png`.

@@ -28,10 +28,8 @@ AI assistance was particularly useful for exploring implementation approaches, w
 
 ## Validation performed
 
-I cloned the repository into a separate folder, created a fresh virtual environment, installed the dependencies from `requirements.txt`, and ran the test suite and the demo. The suite grew from 86 passing tests before the quarantine layer to 94 afterwards, to 113 with the property-based tests, and to 143 with the duplicate-spike, brand and SQLite-settings tests. The clean-clone run of the 113-test suite reported 113 passed in 518.33 seconds, and `python -m src.main --demo` then ran successfully. Earlier clean-clone runs took 375.12 seconds (86 tests) and 470.30 seconds (94 tests); I have not investigated why the suite is slow on my machine.
+I cloned the repository into a separate folder, created a fresh virtual environment, installed the dependencies from `requirements.txt`, ran the test suite, and completed the mock demo. My latest local test run reported **143 passed in 8.83 seconds** after the test-suite optimisations. I also ran the pipeline in mock mode, checked idempotency across repeated runs, reviewed the dashboard, and examined successful targets, explicit zero-result targets, missing-hour detection, alert aggregation, backfill, and recovery.
 
-I also ran the pipeline in mock mode, checked idempotency across repeated runs, reviewed the dashboard, and examined the output for successful targets, explicit zero-result targets, missing-hour detection, alert aggregation, backfill, and recovery. I exported the dashboard's coverage grid to CSV and checked it: 50 keywords across three scheduled-hour columns, with the two zero-result keywords marked `zero_result` in all three hours and the other 48 marked `success`.
-
-The observed run reported 50 targets per slot, 48 `success` results, 2 `zero_result` results, and 1,616 rows written or upserted per slot.
+The mock demo reported 50 targets per slot, 48 `success` results, 2 `zero_result` results, and 1,616 rows written or upserted per slot. I exported the dashboard coverage grid to CSV and checked it: 50 keywords across three scheduled-hour columns, with the two zero-result keywords marked `zero_result` in all three hours and the other 48 marked `success`.
 
 These results are from synthetic data and local testing. They are not evidence of live AJIO collection.

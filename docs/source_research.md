@@ -1,6 +1,6 @@
 # Source Research: AJIO Search Visibility (Task A)
 
-**Date of inspection:** 16 October 2026
+**Date of inspection:** 16–19 October 2026
 **Method:** manual viewing in a normal desktop Chrome session, with DevTools open in read-only mode (Network and Console tabs). No scripts, no automation, no login, no requests replayed or modified.
 **Outcome:** live collection of AJIO search results is **not permitted** by robots.txt. This project uses a **clearly labelled mock adapter**. No live AJIO data is collected or presented anywhere in this repository.
 
@@ -21,7 +21,7 @@ https://www.ajio.com/search/?text=white+kurta+for+men&itm_source=search&itm_sour
 - Tracking parameters: `itm_source`, `itm_source_detail` (these do not change the results; they only record where the search came from)
 - Page title: "Best Offers on White kurta for men"
 - Breadcrumb: Home / white kurta for men
-- Result header: "White Kurta For Men", **28,073 Items Found**
+- Result header: "White Kurta For Men". I observed **28,073 Items Found** in an earlier session and **27,854 Items Found** in a later session. The displayed count changed between sessions.
 
 (Screenshots: `screenshots/` - source inspection, URL visible)
 
@@ -40,40 +40,44 @@ https://www.ajio.com/search/?text=white+kurta+for+men&itm_source=search&itm_sour
 - On first load the page shows **grey skeleton placeholders** before any product appears (screenshot 1). Content is therefore filled in **client-side**, not delivered as finished HTML.
 - The Network tab shows many `fetch` requests initiated by `fetchWrapper.mjs`, a service worker (`sw.js`) and framework bundles (`desktop-libraries`, `desktop-vendors`). Product images are loaded afterwards as separate fetches (for example `vastrado_white_men_slim_fit_kurta.jpg`).
 - An ad-related script (`jioAds.js`) is loaded on the page. I did not inspect it. It suggests that sponsored placements are served through an ad component, but I have **not verified** how sponsored units are marked in the page.
-- Page-source check: I opened `view-source:` for the same URL in a separate tab and searched for a product name from the results ("Vastrado"). It appears inside an embedded `<script type="application/ld+json">` block holding a schema.org `ItemList` (name, image, URL and position for each product, plus a total item count). I did not otherwise analyse whether the rendered product cards are present in the raw HTML.
+- I opened `view-source:` for the search URL in a separate tab. I did not record enough detail to make a reliable claim about whether the full product grid was present in the initial raw HTML.
 
-### 1.4 Fields visible on a result card
+### 1.4 Fields visible on result cards and product pages
 
-Seen directly: brand and product image. Product title and price sit below the visible area in my screenshots, so I did not record the selling price, struck-through MRP, rating, rating count, discount tag, badge or any "Sponsored"/"Ad" label from the live page. Product titles are available in the JSON-LD block. I list a field as observed only if I saw it myself.
+On the search-results page, I observed product cards and later inspected two linked JOMPERS product-detail pages. I used the browser's rendered page and Chrome DevTools in read-only mode; I did not run scripts, automate collection, or replay requests.
 
-### 1.5 Pagination
+**Search-results page observations:**
 
-In a logged-out session the results load by infinite scroll, in a grid of three products per row; I saw no numbered pages. I did not record how many items load per scroll or whether the URL changes.
+- I observed an `Ad` label on one product image in the search results. I did not establish the underlying markup or the rule that determines sponsored placement.
+- In a later session, I changed sorting/filtering options including Discount, What's New, and price filters. The displayed products changed. Under What's New, I observed an Ad-labelled unit in each visible row during that session. This is a session-specific observation, not proof of a universal placement rule.
+- I did not establish whether the same products retain sponsored status or whether the sponsored placements move consistently across all sort/filter settings.
 
-### 1.6 Pincode, Size and Delivery Checks
+**Search-results DOM check:** I inspected the rendered search page here: [AJIO search — white kurta for men](https://www.ajio.com/search/?text=white+kurta+for+men&itm_source=search&itm_source_detail=white%2Bkurta%2Bfor%2Bmen). I observed an Ad label on one result image; I did not verify the underlying sponsored-unit markup.
 
-I inspected the search results for **“white kurta for man”** and opened an individual product to examine its size-selection and delivery-check functionality.
+**Product-detail page DOM check:**
 
-During the inspection, I did not observe a direct pincode-check control on the main search-results page. I therefore performed the delivery checks on the individual product page.
+I inspected these two JOMPERS product pages:
 
-**Tests performed:**
-- Changed the size and pincode multiple times for the same product.
-- Kept the size constant while changing the pincode.
-- Kept the pincode constant while changing the size.
-- Returned to the search-results page after changing the pincode to check whether the selected pincode was visible or whether the product listing had changed.
+1. [JOMPERS — Printed Regular Fit Kurta & Pyjamas Set](https://www.ajio.com/jompers-printed-regular-fit-kurta--pyjamas-set/p/704186149_white?itm_source=search&itm_source_detail=white%2Bkurta%2Bfor%2Bmen)
+2. [JOMPERS — Embroidered Regular Fit Kurta & Pyjamas Set](https://www.ajio.com/jompers-embroidered-regular-fit-kurta--pyjamas-set/p/704186223_purple?itm_source=search&itm_source_detail=white%2Bkurta%2Bfor%2Bmen)
 
-**Observed results:**
-- The displayed delivery date remained unchanged across the variations tested.
-- The selected pincode was not visible on the search-results page after returning from the product page.
-- The product listing appeared unchanged after the pincode was changed.
+I observed the same classes on both pages for the product title (`prod-name`), brand (`brand-name`), and MRP label (`prod-mrp`). The first page showed the title “Printed Regular Fit Kurta & Pyjamas Set”, brand JOMPERS, MRP ₹3,499, and a conditional promotional price of ₹2,974 with code `ALLSTARS15`. The second page showed “Embroidered Regular Fit Kurta & Pyjamas Set”, brand JOMPERS, MRP ₹3,499, and the same conditional promotional price of ₹2,974 with code `ALLSTARS15`.
 
-**Conclusion:**
+For the first product, the page stated “No rating or review to display.” I did not confirm the rating state for the second product. I did not observe an `Ad` label on either product-detail page; that does not establish whether either item was sponsored on the search-results page.
 
-The inspection confirmed that size and pincode variations did not change the displayed delivery date for the tested product. However, I could not verify whether the selected pincode was applied in the search-results context or whether pincode influences product visibility or ranking. These behaviours remain unverified based on the checks performed.
+The DOM snippets I observed included:
 
-### 1.7 Sponsored product identification
+```html
+<h1 role="heading" aria-level="2" class="prod-name" aria-label="Printed Regular Fit Kurta & Pyjamas Set">Printed Regular Fit Kurta & Pyjamas Set</h1>
+<h2 role="heading" aria-level="1" class="brand-name" aria-label="JOMPERS">JOMPERS</h2>
+<span class="prod-mrp" aria-label="MRP">MRP</span>
+```
 
-On an inspected product unit in the search results, I observed an "Ad" label in the top-left corner of the product image. I use this visible label as evidence for identifying that product unit as a sponsored product (SP). I did not independently verify a sponsored brand banner (SB) during this inspection. Any SB placements in the mock adapter are simulated and are labelled accordingly.
+I confirmed these class names on two JOMPERS product pages only. I do not assume that every AJIO product uses identical markup. The MRP label snippet itself contains the label, not the price amount; I read the ₹3,499 amount from the rendered product page.
+
+### 1.5 Pagination and loading
+
+In a later search session, the page showed **27,854 Items Found**. I did not see numbered pagination. I observed approximately 14 rows with three product cards per row (about 42 visible cards) before more results loaded as I reached the end. This supports an infinite-scroll or load-more behaviour in that session; it does not mean all displayed results were loaded at once. I did not record whether the URL changed during scrolling.
 
 ---
 
@@ -99,7 +103,9 @@ Consequences:
 
 The one brief-permitted exception, `/fc/` and `/fb/` pages with `?query=`, are category and brand-store style pages. These are not keyword search results, so they do not answer the "visibility for a keyword" question. I did not use them.
 
-**Not verified:** whether results vary by pincode, whether sort order changes the sponsored placement, and the exact markup used for sponsored units.
+**Pincode and delivery behaviour:** While logged out, I did not find an option to change the pincode directly on the search-results page. I could check the pincode only after opening an individual product page. In the product-level checks I performed, changing the pincode did not visibly change the displayed delivery date. I did not verify whether pincode affects search ranking, product availability, or results across other products.
+
+**Still not established:** the exact underlying markup and rules for sponsored placements; whether the sponsored placements change consistently across sort/filter settings; and whether the observed scroll batch size is consistent across sessions.
 
 ---
 
@@ -118,15 +124,10 @@ Per the brief ("if live access is blocked or not permitted, stop, document what 
 | Observed on AJIO | In the mock |
 |---|---|
 | Keyword search via a `/search/?text=` page, default sort Relevance | Targets are keywords; sort order is fixed to relevance; the mock is addressed by keyword and page number, not by URL |
-| A schema.org JSON-LD `ItemList` embedded in the page source, with `name`, `image`, `url`, `position` per item and `numberOfItems` (28,073) | **Modelled as observed.** Every mock page embeds a `<script type="application/ld+json">` `ItemList` with exactly those fields. The parser takes each product's name, URL and image from it, and records `numberOfItems` |
-| Grid of cards with brand, name, image, price | **Simulated.** Each card is an `<article class="product-card">` inside `[data-testid="product-grid"]`, with `data-*` attributes for price, MRP, rating, count, tag, deal, placement. The JSON-LD does not contain these fields, so this layer is invented; I did not inspect the rendered DOM |
+| Grid of cards with brand, name, image, price | Each card is an `<article class="product-card">` inside `[data-testid="product-grid"]`, with `data-*` attributes for name, price, MRP, rating, count, tag, deal, image, URL |
 | An ad component (`jioAds.js`) loaded on the page | Cards carry `data-kind` = `SB`, `SP` or organic, and `data-campaign-id` on paid units. **This marker is invented for the mock; I did not verify how AJIO marks sponsored units** |
-| Result counts such as "28,073 Items Found" | Not modelled. A genuine zero-result page is a grid with no cards and an explicit no-results message |
-| Brand label under each product image | **Simulated as an explicit field.** The mock cards carry the brand as a `data-brand` attribute; I did not inspect the live markup. The pipeline never derives a brand from the product title |
-| Infinite scroll in a logged-out session | **Not modelled.** The mock serves numbered pages (page 1, page 2) per keyword, which is a simplification; how a real source would be paged is unknown |
-| Client-side rendering: skeleton loaders, then fetch calls | **Not modelled.** The mock returns static HTML with the grid already present, which is a simplification. The JSON-LD block is the only layer that exists in the page source as observed |
-
-**Design rule that follows from this:** the JSON-LD cannot tell a sponsored unit from an organic one, and has no price. So it is never trusted to decide a page is healthy: a page with JSON-LD but no product grid is `parse_failed` (fixture `layout_changed_jsonld_present.html`, test `test_json_ld_does_not_rescue_a_page_whose_grid_is_missing`). A mismatch between the JSON-LD and the grid (different product at the same position, or different item counts) is logged as a parser warning.
+| Result counts such as "28,073 Items Found" and "27,854 Items Found" | Not modelled. A genuine zero-result page is a grid with no cards and an explicit no-results message |
+| Client-side rendering: skeleton loaders, then fetch calls | **Not modelled.** The mock returns static HTML, which is a simplification. A real client-rendered page could not be parsed this way |
 
 The mock cannot support any claim about real AJIO ranking, prices, ratings or campaigns: they are simulated.
 
@@ -136,10 +137,10 @@ The mock cannot support any claim about real AJIO ranking, prices, ratings or ca
 
 | Question | Assumption | Why |
 |---|---|---|
-| Pages per keyword | 2 pages, up to 20 units each in the generator (`max_pages` per target) | 50 keywords x 2 pages = 100 requests. The live page uses infinite scroll; two pages is an assumption |
+| Pages per keyword | 2 pages, up to 20 units each in the generator (`max_pages` per target) | 50 keywords x 2 pages = 100 requests |
 | Request rate | 1 request every 2 s (0.5 rps) with jittered backoff on retries; `Retry-After` honoured within a 10 s budget | 100 requests take about 200 s plus response time, far inside the hour. The mock is exempt by default since it does no network I/O |
 | Sort order | Relevance (the site default) | What a shopper sees first |
-| Pincode | Not varied; results assumed pincode-independent in the mock | Unverified on the live site |
+| Pincode | Not varied in the mock; no logged-out search-page control was available during inspection | On individual product pages, changing the pincode did not visibly change the delivery date in the checks performed; effects on search ranking, availability, and other products remain unverified |
 | Placement types | `Organic`, `SP` (sponsored product), `SB` (sponsored brand banner) | As in the brief; real markup unverified |
 | Product identity | `product_id` from the canonical `/p/<id>` URL path with tracking parameters removed. Never the title | Titles repeat and change |
 | Missing product | Never treated as out of stock unless the page says so | Per the brief |
@@ -151,3 +152,4 @@ The mock cannot support any claim about real AJIO ranking, prices, ratings or ca
 
 - All rows in the database are synthetic mock data, labelled as such.
 - Screenshots of the live site are from manual browsing only and appear as source-inspection evidence, not as extracted data.
+- I distinguish direct browser observations from assumptions and mock-only behaviour. I do not claim that the mock parser reproduces AJIO’s live DOM or that the project collects live AJIO search results.

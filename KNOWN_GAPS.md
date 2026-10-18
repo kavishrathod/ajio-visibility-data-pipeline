@@ -26,7 +26,7 @@
 
 13. **Gold is views, not materialised tables.** They are recomputed on every read, which is fine at this scale and the first thing to change at 100x. Rank-movement reporting is not built.
 
-14. **Test duration.** The clean-clone runs on my Windows machine took 375.12 seconds (86 tests), 470.30 seconds (94 tests) and 518.33 seconds (113 tests), and a later local run took 529.74 seconds. Profiling showed the cost is file-system work (about 1,400 SQLite commits and 800 fixture copies), so I made the tests run SQLite without a disk journal or fsync, share one fixture folder, and skip repeated connection setup; no assertion changed. I have not timed the suite on that machine since these changes, and a fresh setup with installation and the demo may still take long on a slow disk. `scripts/fs_benchmark.py` measures the costs on a given machine, and the 35 tests that write no files run in a few seconds (command in the README).
+14. **Test duration.** I optimised the test suite by using an in-memory SQLite journal without fsync only in tests (`AJIO_SQLITE_FAST=1`), sharing the repository fixture folder, and removing repeated connection setup. Production retains SQLite's durable defaults, and `tests/test_sqlite_settings.py` checks both configurations. My latest local run reported 143 passed in 8.83 seconds. I completed a separate clean-clone test and demo; I do not treat the latest local timing as the clean-clone timing. `scripts/fs_benchmark.py` measures file-system and SQLite costs on a given machine.
 
 15. **CI is basic.** One workflow runs `pytest` on Python 3.11 and 3.12 plus a mock smoke run. No linting, coverage or dependency pinning.
 

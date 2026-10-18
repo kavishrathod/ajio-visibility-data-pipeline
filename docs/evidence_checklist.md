@@ -24,6 +24,8 @@ screenshots show the MOCK DATA ONLY banner.
 | `03_dashboard_overview.png` | Dashboard overview | `python -m streamlit run src/dashboard/app.py` |
 | `07_gold_aggregates.png` | Gold aggregates tab | Dashboard, Gold aggregates tab |
 | `13_quarantine_data.png` | Quarantined records | Dashboard, Quarantine tab, or `python scripts/show_quarantine.py --details` |
+| `15_duplicate_spike_incident.png` | Duplicate-spike incident in the dashboard | I ran `python -m scripts.demo_duplicate_spike` and opened the separate demo database in the dashboard |
+| `16_brand_comparison.png` | Organic rank versus sponsored placements by brand | Dashboard, Gold aggregates tab; mock data only |
 
 ## Other checks
 
@@ -33,4 +35,4 @@ screenshots show the MOCK DATA ONLY banner.
 
 - Idempotency: run the same hour twice, then `python scripts/check_idempotency.py`. Rows per slot equal the
   distinct target and rank count.
-- Clean clone: results are recorded in the README (113 passed, demo ran, coverage grid exported to CSV and checked).
+- Clean clone: I cloned the repository into a fresh folder, installed dependencies in a new virtual environment, ran the tests, and completed the mock demo. My latest local run after test-suite optimisation reported 143 passed in 8.83 seconds; that timing is not labelled as the clean-clone timing.

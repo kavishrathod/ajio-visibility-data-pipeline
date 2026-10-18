@@ -127,7 +127,7 @@ python -m streamlit run src/dashboard/app.py
   Prove same-hour reruns do not       `python scripts/check_idempotency.py` (rows per slot equal distinct
   duplicate rows                      target+rank)
 
-  List quarantined records            `python scripts/show_quarantine.py --details`
+  List quarantined records            `python scripts/show_quarantine.py --details`\n\n  Demonstrate duplicate-spike alert    `python -m scripts.demo_duplicate_spike` (separate demo database; fake mailer)
 
   Measure file-system and SQLite     `python scripts/fs_benchmark.py`
   costs on this machine
@@ -266,26 +266,24 @@ The suite has 143 tests, 21 of them property-based (see
 [`docs/property_tests.md`](docs/property_tests.md)). GitHub Actions runs
 `pytest` and a mock smoke run on every push.
 
-Latest local test run: 143 passed in 8.83 seconds. The suite includes 21 property-based tests. GitHub Actions is configured to run the tests and a mock smoke run on pushes. in a clean clone on Windows: a
-fresh `git clone`, a new virtual environment, dependencies installed from
-`requirements.txt`, then the full suite and the demo.
+My latest local test run reported **143 passed in 8.83 seconds**. I also
+completed a clean-clone verification by cloning the repository into a
+separate folder, creating a fresh virtual environment, installing
+`requirements.txt`, running the test suite, and completing the mock demo.
+I do not present the latest local timing as the clean-clone timing.
 
--   `python -m pytest -q`: **143 passed in 8.83 seconds**. Earlier
-    clean-clone runs took 375.12 seconds (86 tests) and 470.30 seconds
-    (94 tests), and a later local run took 529.74 seconds. The suite is
-    fast on a quick disk, so the time points to file-system cost on this
-    machine (see below).
--   `python -m src.main --demo` completed successfully: 50 targets per
-    slot, 48 `success`, 2 `zero_result`, 1,616 rows written/upserted per
-    slot, missing-slot detection, repeated-alert aggregation, late
-    backfill, 100% completeness, and incident resolution.
--   I exported the dashboard coverage grid to CSV afterwards. It lists the
-    50 configured keywords across three scheduled-hour columns. `asdfgh
-    qwerty zzzz` and `zxqvbn shirt` are `zero_result` in all three hours
-    and the other 48 keywords are `success`, so every hour has 48 + 2 = 50
-    targets complete.
+- `python -m pytest -q`: 143 passed in 8.83 seconds in my latest local run.
+- `python -m src.main --demo`: completed successfully with 50 targets per
+  slot, 48 `success`, 2 `zero_result`, 1,616 rows written or upserted per
+  slot, missing-slot detection, alert aggregation, late backfill, 100%
+  completeness, and incident resolution.
+- I exported the dashboard coverage grid to CSV and checked it. It lists
+  the 50 configured keywords across three scheduled-hour columns. The two
+  intended zero-result keywords are `zero_result` in all three hours; the
+  other 48 keywords are `success`.
 
-These are mock-environment results, not live AJIO observations.
+These results are from synthetic data and local testing, not live AJIO
+observations.
 
 ### Test-suite speed
 
