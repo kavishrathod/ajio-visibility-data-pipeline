@@ -87,6 +87,7 @@ def evaluate_completeness(
                 "incident_id": old.get("incident_id"),
                 "last_run_id": old.get("last_run_id"),
                 "parse_error_count": int(old.get("parse_error_count") or 0),
+                "duplicate_count": old.get("duplicate_count"),
                 "is_mock": 1,
             })
         elif old["status"] == "running" and due and not _run_is_active(db, old.get("last_run_id")):
@@ -96,7 +97,8 @@ def evaluate_completeness(
                 "expected": 1, "observed": 0, "row_count": 0, "first_seen_at": old.get("first_seen_at") or checked_at,
                 "checked_at": checked_at, "missing_reason": "Run ended without a terminal status for this target",
                 "incident_id": old.get("incident_id"), "last_run_id": old.get("last_run_id"),
-                "parse_error_count": int(old.get("parse_error_count") or 0), "is_mock": 1,
+                "parse_error_count": int(old.get("parse_error_count") or 0),
+                "duplicate_count": old.get("duplicate_count"), "is_mock": 1,
             })
         elif old is not None:
             db.execute(

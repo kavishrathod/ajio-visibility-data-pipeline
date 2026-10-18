@@ -60,7 +60,7 @@ def test_rejected_cards_and_duplicates_are_quarantined_with_reason_and_payload(t
 
 def test_cross_page_duplicate_is_quarantined_and_names_the_page_that_was_kept(tmp_path):
     config = isolated_config(tmp_path, ["men black jeans"])
-    adapter = MockAdapter(config.root / "tests" / "fixtures", page_mapping={
+    adapter = MockAdapter(config.fixtures_dir, page_mapping={
         ("men black jeans", 1): "pagination_drift_page1.html", ("men black jeans", 2): "pagination_drift_page2.html"})
     run_pipeline(config, HOUR, adapter_override=adapter, sleeper=no_sleep)
     rows = _quarantine(_db(config))

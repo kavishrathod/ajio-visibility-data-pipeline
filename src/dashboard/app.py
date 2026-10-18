@@ -183,6 +183,22 @@ with gold_tab:
             (config.platform, gold_hour)))
         st.dataframe(kw_df, use_container_width=True, hide_index=True)
 
+        st.markdown("**Brand: organic rank versus sponsored placements** (`gold_brand_placement`)")
+        brand_cov = db.query("SELECT units, units_with_brand, brand_coverage_pct FROM gold_brand_coverage WHERE platform=? AND scheduled_hour=?", (config.platform, gold_hour))
+        if brand_cov:
+            st.caption(f"{brand_cov[0]['units_with_brand']} of {brand_cov[0]['units']} units carry a brand label ({brand_cov[0]['brand_coverage_pct']}%); "
+                       "units without one are left out, never guessed from the title. A positive paid_position_gain means the brand's first paid unit "
+                       "appears that many places above its best organic unit.")
+        brand_kw = st.selectbox("Keyword", [r["keyword"] for r in db.query(
+            "SELECT DISTINCT keyword FROM gold_brand_placement WHERE platform=? AND scheduled_hour=? ORDER BY keyword", (config.platform, gold_hour))] or ["(none)"],
+            key="gold_brand_keyword")
+        brand_df = pd.DataFrame(db.query(
+            "SELECT brand, organic_units, best_organic_rank, sp_units, best_sp_rank, sb_units, best_paid_absolute_rank, "
+            "best_organic_absolute_rank, paid_position_gain, paid_only FROM gold_brand_placement "
+            "WHERE platform=? AND scheduled_hour=? AND keyword=? ORDER BY (sp_units + sb_units) DESC, brand",
+            (config.platform, gold_hour, brand_kw)))
+        st.dataframe(brand_df, use_container_width=True, hide_index=True)
+
         st.markdown("**Products shown both as organic and sponsored** (`gold_product_placement`)")
         both_df = pd.DataFrame(db.query(
             "SELECT keyword, product_id, best_organic_rank, best_sp_rank, organic_placements, sp_placements "

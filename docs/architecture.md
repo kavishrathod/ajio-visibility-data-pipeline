@@ -16,7 +16,7 @@ flowchart TD
     QUAR --> DASH
     VAL --> SILVER["SILVER: visibility_product (upsert)<br/>unique platform,target,scheduled_hour,absolute_rank"]
     VAL --> THS["target_hour_status<br/>running / success / zero_result / partial /<br/>parse_failed / blocked / failed"]
-    THS --> GOLD["GOLD: completeness per target-hour<br/>missing after grace, thresholds, row-drop, stale"]
+    THS --> GOLD["GOLD: completeness per target-hour<br/>missing after grace, thresholds, row-drop, duplicate-spike, stale"]
     GOLD --> INC["alert_incident: one per platform-hour<br/>dedupe, cooldown, status-change resend, recovery"]
     INC --> MAIL["Mailer: file sink data/outbox (default)<br/>or SMTP / Mailpit"]
     SILVER --> DASH["Streamlit dashboard<br/>(reads the same SQLite tables)"]
@@ -31,10 +31,12 @@ flowchart TD
 - **Adapters** do one thing, fetch a page. Retry, backoff, jitter and rate limiting live outside them (`collectors/fetcher.py`, `collectors/ratelimit.py`) so they are unit-testable. `MockAdapter` has no network code; `AjioAdapter` raises `PermissionError`; `ReplayAdapter` serves stored raw files.
 - **Raw layer (Bronze):** every response is written to disk with a metadata sidecar before the database is touched, partitioned `platform=/date=/hour=/<run_id>/`, where date and hour are the IST slot (10:00 IST slot -> `date=2026-10-16/hour=10`). Partitioning by hour matches how the data is queried, reloaded and expired; the run id keeps reruns from overwriting each other.
 - **Parsing** separates an explicit no-results marker from a missing grid, and detects blocked/challenge pages. HTTP status is checked first.
+- **Brand:** taken only from an explicit brand label on the card, never from the product title; cleaned and normalized into `brand` and `brand_key` (`pipeline/brands.py`, optional curated aliases in `config/brand_aliases.json`).
+- **Duplicates:** each target-hour records how many repeated placements it dropped (`duplicate_count`); `monitoring/duplicates.py` turns that into a rate and a rolling baseline for the duplicate-spike trigger (`docs/duplicate_spike.md`).
 - **Normalisation:** missing or ambiguous values stay NULL. Placement type is part of the dedupe key, so SP and Organic copies of one product are both kept.
 - **Quarantine:** rejected cards, placements and pages go to `quarantine_record` with a reason code, the payload and the raw page path (`docs/quarantine.md`). It is evidence, not a dependency: a failed write never changes a status, and `--reload-raw` rebuilds it.
 - **Silver:** `visibility_product`, unique on `(platform, target_id, scheduled_hour, absolute_rank)`; a complete parse replaces the slot, a partial one never deletes earlier good rows.
-- **Status / Gold:** completeness is measured from `target_hour_status`, not from product row counts, so a valid zero result is complete and a layout change is not. Aggregates are SQL views (`gold_hour_summary`, `gold_keyword_hour`, `gold_product_placement`, `gold_quarantine_summary`; see `docs/gold_layer.md`).
+- **Status / Gold:** completeness is measured from `target_hour_status`, not from product row counts, so a valid zero result is complete and a layout change is not. Aggregates are SQL views (`gold_hour_summary`, `gold_keyword_hour`, `gold_product_placement`, `gold_brand_placement`, `gold_brand_coverage`, `gold_quarantine_summary`; see `docs/gold_layer.md`).
 - **Locking:** one platform-wide lock row. A second run is recorded as `skipped_overlap`. A lock is cleared when its run is finished, or after 4 hours.
 - **Alerting:** incidents are persisted; email failure never loses state.
 

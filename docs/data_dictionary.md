@@ -24,6 +24,8 @@ All timestamps use ISO 8601 UTC strings ending in `Z` unless the value is explic
 | `campaign_id` | Campaign identifier when provided; only synthetic values appear in fixtures. |
 | `product_id` | Stable product key, preferably supplied by data or derived from product URL path. Can be NULL for a brand banner. |
 | `product_url` | Product URL if present. |
+| `brand` | Brand as the page shows it, cleaned (whitespace collapsed, Unicode normalized, curated aliases applied). NULL when the page gives no brand label or a placeholder such as `N/A`. Never taken from the product title. |
+| `brand_key` | Grouping key for the brand: case-folded with punctuation and spacing collapsed (`&` kept). Variants that differ only in case or spacing share a key. NULL when `brand` is NULL. |
 | `run_id` | Run that most recently wrote this normalized position. |
 | `target_id` | Foreign key to `scrape_target`. |
 | `scheduled_hour` | Hour being measured; supports reruns/backfills. |
@@ -37,14 +39,14 @@ All timestamps use ISO 8601 UTC strings ending in `Z` unless the value is explic
 - **`scrape_target`**: one configured keyword per platform, enabled flag, cadence, max pages, priority.
 - **`scrape_run`**: run-level lifecycle, trigger, scheduled hour, counts, adapter mode, errors, retry count.
 - **`raw_snapshot`**: fetched response metadata, checksum, local file path, status, response headers, mock flag.
-- **`target_hour_status`**: one status per platform/keyword/hour; `expected=1` means one slot was due and `observed=1` means it completed with `success` or a valid `zero_result`. `row_count` is the normalized row count; parse failures and incomplete reasons remain explicit.
+- **`target_hour_status`**: one status per platform/keyword/hour; `expected=1` means one slot was due and `observed=1` means it completed with `success` or a valid `zero_result`. `row_count` is the normalized row count; parse failures and incomplete reasons remain explicit. `duplicate_count` is the number of repeated placements dropped for that target-hour (NULL = not measured); it feeds the duplicate-spike alert.
 - **`quarantine_record`**: one row per rejected card, placement or page. Columns: `run_id`, `platform`, `target_id`, `keyword`, `scheduled_hour`, `page_number`, `record_type` (`card` / `unit` / `page`), `record_index` (card position on the page, or entry order within the target; 0 for a page), `stage` (`parse` / `validate` / `dedupe`), `reason_code`, `reason_detail`, `payload_json` (card attributes or the parsed unit), `raw_payload_ref` (the raw page it came from), `is_mock`, `created_at`. Unique on `(run_id, target_id, page_number, record_type, record_index, reason_code)`. Reason codes are listed in `docs/quarantine.md`.
 - **`alert_incident`**: aggregated alert per hour, send cooldown, resolution, recovery notification.
 - **`pipeline_lock`**: short-lived process lock that prevents overlapping runs.
 
 ## Gold views
 
-`gold_hour_summary` (coverage and volume per hour), `gold_keyword_hour` (unit mix, paid share, price spread per keyword and hour), `gold_product_placement` (best organic rank versus best sponsored rank per product), `gold_quarantine_summary` (quarantined records by reason, latest attempt per target-hour). Definitions are in `sql/schema.sql` and explained in `docs/gold_layer.md`.
+`gold_hour_summary` (coverage and volume per hour), `gold_keyword_hour` (unit mix, paid share, price spread per keyword and hour), `gold_product_placement` (best organic rank versus best sponsored rank per product), `gold_quarantine_summary` (quarantined records by reason, latest attempt per target-hour), `gold_brand_placement` (each brand's organic rank next to its sponsored placements, per keyword and hour), `gold_brand_coverage` (share of units that carry a brand). `gold_hour_summary` also shows `duplicates` and `duplicate_rate_pct`. Definitions are in `sql/schema.sql` and explained in `docs/gold_layer.md`.
 
 ## Rank and dedup semantics
 
@@ -68,9 +70,10 @@ Ranks are assigned in observed top-to-bottom order after duplicate placements wi
 
 ## Added columns and files
 
+- `visibility_product.brand`, `brand_key` and `target_hour_status.duplicate_count` were added after the first schema; `Database.initialize()` upgrades older local databases in place (and renames `product_image_u` to `product_image_url`).
 - `target_hour_status.anomalies`: JSON list of pagination-drift findings, e.g. `{"product_id": "333", "kept_on_page": 1, "repeated_on_page": 2}`; NULL when clean.
 - `alert_incident.run_id`, `conditions` (JSON list of active triggers), `fingerprint` (hash of the trigger set; a change causes an immediate resend), `last_error` (delivery failure note).
-- `alert_incident.alert_type` is the highest-priority active trigger: `run_failed`, `blocked`, `parser_errors`, `missing_slots`, `completeness`, `row_drop`, `stale_data`. One incident per platform-hour holds all active triggers.
+- `alert_incident.alert_type` is the highest-priority active trigger: `run_failed`, `blocked`, `parser_errors`, `missing_slots`, `completeness`, `row_drop`, `duplicate_spike`, `stale_data`. One incident per platform-hour holds all active triggers.
 - Raw sidecar `*.meta.json`: `run_id`, `scheduled_hour`, `keyword`, `page`, `http_status`, `fetched_at`, `is_mock`, `headers`, `sha256`. Used by `--reload-raw`.
 - `scrape_run.trigger`: `scheduled`, `manual`, `backfill`, or `reload`.
 

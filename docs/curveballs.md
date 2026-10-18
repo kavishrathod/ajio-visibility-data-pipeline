@@ -30,3 +30,7 @@ Rejected records for these scenarios are also kept in `quarantine_record` (see `
 ## Property-based coverage
 
 Generated-input tests in `tests/test_properties.py` (see `docs/property_tests.md`) also exercise I-3 (rank continuity across pages), I-5 (price, count and rating parsing) and I-6 (the placement key and deduplication) beyond the fixed fixtures. They found and led to fixes of two parser bugs: an out-of-range rating read as a fragment of itself, and a wrong product key for a URL whose title slug is `p`.
+
+## Duplicate spikes (Task E)
+
+I-4 and I-6 drop repeated placements; the duplicate-spike check watches how many are dropped per hour and opens an incident when the count and rate are anomalous (`docs/duplicate_spike.md`). The tests in `tests/test_duplicate_spike.py` use the fixture `tests/fixtures/duplicate_spike.html` and cover detection with exact counts, the count floor, the rolling baseline, resolution with one recovery email, and hours that are still running or not measured.

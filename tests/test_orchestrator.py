@@ -25,7 +25,7 @@ def test_parser_failure_is_not_recorded_as_zero_result(tmp_path):
     from src.collectors.mock_adapter import MockAdapter
 
     config = isolated_config(tmp_path, ["men white sneakers"])
-    adapter = MockAdapter(config.root / "tests" / "fixtures", page_mapping={("men white sneakers", 1): "layout_changed.html"})
+    adapter = MockAdapter(config.fixtures_dir, page_mapping={("men white sneakers", 1): "layout_changed.html"})
     result = run_pipeline(config, scheduled_hour="2026-10-16T14:30:00Z", adapter_override=adapter)
     db = Database(config.db_path, config.root)
     status = db.query("SELECT status,missing_reason FROM target_hour_status")
@@ -40,7 +40,7 @@ def test_rank_sequence_continues_across_pages(tmp_path):
 
     config = isolated_config(tmp_path, ["men white sneakers"])
     adapter = MockAdapter(
-        config.root / "tests" / "fixtures",
+        config.fixtures_dir,
         page_mapping={
             ("men white sneakers", 1): "mixed_placements.html",
             ("men white sneakers", 2): "page2_results.html",

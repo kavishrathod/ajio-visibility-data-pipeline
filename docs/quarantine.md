@@ -24,6 +24,10 @@ All data is synthetic mock data.
 - **A fetch that never produced a page** (timeout, retries exhausted). There is no payload to keep; the target is
   `failed` or `partial` in `target_hour_status`.
 
+The repeated placements dropped at the deduplication stage are also counted per target-hour (`duplicate_count`); a
+sharp rise in that count opens a duplicate-spike incident (`docs/duplicate_spike.md`), and the quarantine rows are the
+evidence to look at.
+
 ## Behaviour
 - **Evidence, not a dependency.** A failed quarantine write is logged in the run's `db_errors` but never changes a
   target's status or blocks loading valid rows. The rows can be rebuilt with `--reload-raw`, because the raw page is

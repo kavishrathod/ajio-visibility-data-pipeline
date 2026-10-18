@@ -70,6 +70,8 @@ CREATE TABLE IF NOT EXISTS visibility_product (
   campaign_id TEXT,
   product_id TEXT,
   product_url TEXT,
+  brand TEXT,                -- brand as the page shows it, cleaned; NULL when the page gives none (never taken from the title)
+  brand_key TEXT,            -- normalised grouping key for brand
   run_id TEXT NOT NULL REFERENCES scrape_run(run_id),
   target_id INTEGER NOT NULL REFERENCES scrape_target(target_id),
   scheduled_hour TEXT NOT NULL,
@@ -98,6 +100,7 @@ CREATE TABLE IF NOT EXISTS target_hour_status (
   last_run_id TEXT REFERENCES scrape_run(run_id),
   parse_error_count INTEGER NOT NULL DEFAULT 0,
   anomalies TEXT,
+  duplicate_count INTEGER,   -- repeated placements dropped for this target-hour; NULL = not measured
   is_mock INTEGER NOT NULL DEFAULT 1 CHECK (is_mock IN (0,1)),
   PRIMARY KEY (platform, target_id, scheduled_hour)
 );
@@ -219,6 +222,8 @@ SELECT
   SUM(status IN ('failed', 'parse_failed', 'blocked', 'partial')) AS problem,
   SUM(status IN ('running', 'not_yet_due'))                       AS pending,
   SUM(row_count)                                                  AS rows,
+  SUM(duplicate_count)                                            AS duplicates,
+  ROUND(100.0 * SUM(duplicate_count) / NULLIF(SUM(row_count) + SUM(duplicate_count), 0), 2) AS duplicate_rate_pct,
   ROUND(100.0 * SUM(status IN ('success', 'zero_result')) / COUNT(*), 1) AS completeness_pct
 FROM target_hour_status
 GROUP BY platform, scheduled_hour;
@@ -240,3 +245,47 @@ JOIN target_hour_status s
   ON s.platform = q.platform AND s.target_id = q.target_id
  AND s.scheduled_hour = q.scheduled_hour AND s.last_run_id = q.run_id
 GROUP BY q.platform, q.scheduled_hour, q.record_type, q.stage, q.reason_code;
+
+
+-- Brand comparison: for each brand in a keyword's results, its best organic rank next to its sponsored placements.
+-- A brand comes only from an explicit page field; rows with no brand are left out (see gold_brand_coverage).
+-- The displayed brand is the spelling used by the brand's highest-ranked unit in that keyword and hour.
+-- best_paid_absolute_rank and best_organic_absolute_rank use the continuous page position, so
+-- paid_position_gain is how many places above its best organic unit the brand's first paid unit appears
+-- (positive = the paid unit is higher on the page; NULL when the brand has no organic or no paid unit).
+DROP VIEW IF EXISTS gold_brand_placement;
+CREATE VIEW gold_brand_placement AS
+SELECT
+  platform,
+  target_id,
+  keyword,
+  scheduled_hour,
+  brand_key,
+  (SELECT v.brand FROM visibility_product v
+    WHERE v.platform = p.platform AND v.target_id = p.target_id AND v.scheduled_hour = p.scheduled_hour
+      AND v.brand_key = p.brand_key ORDER BY v.absolute_rank LIMIT 1)             AS brand,
+  COALESCE(SUM(product_type = 'Organic'), 0)                                  AS organic_units,
+  MIN(CASE WHEN product_type = 'Organic' THEN relative_rank END)              AS best_organic_rank,
+  COALESCE(SUM(product_type = 'SP'), 0)                                       AS sp_units,
+  MIN(CASE WHEN product_type = 'SP' THEN relative_rank END)                   AS best_sp_rank,
+  COALESCE(SUM(product_type = 'SB'), 0)                                       AS sb_units,
+  MIN(CASE WHEN product_type IN ('SP', 'SB') THEN absolute_rank END)          AS best_paid_absolute_rank,
+  MIN(CASE WHEN product_type = 'Organic' THEN absolute_rank END)              AS best_organic_absolute_rank,
+  MIN(CASE WHEN product_type = 'Organic' THEN absolute_rank END)
+    - MIN(CASE WHEN product_type IN ('SP', 'SB') THEN absolute_rank END)      AS paid_position_gain,
+  CASE WHEN SUM(product_type IN ('SP', 'SB')) > 0 AND SUM(product_type = 'Organic') = 0 THEN 1 ELSE 0 END AS paid_only
+FROM visibility_product p
+WHERE brand_key IS NOT NULL
+GROUP BY platform, target_id, scheduled_hour, brand_key;
+
+-- How many units carry a brand: the share the brand comparison is based on.
+DROP VIEW IF EXISTS gold_brand_coverage;
+CREATE VIEW gold_brand_coverage AS
+SELECT
+  platform,
+  scheduled_hour,
+  COUNT(*)                                                        AS units,
+  SUM(brand_key IS NOT NULL)                                      AS units_with_brand,
+  ROUND(100.0 * SUM(brand_key IS NOT NULL) / COUNT(*), 1)         AS brand_coverage_pct
+FROM visibility_product
+GROUP BY platform, scheduled_hour;

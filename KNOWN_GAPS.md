@@ -14,7 +14,7 @@
 
 7. **Scheduler is foreground or external.** `--schedule` stops if the process stops; stale-data detection only fires when a check runs (the cron example runs one at minute 20). Missed hours are found by the completeness check and backfilled by hand.
 
-8. **Baselines are simple.** Row-drop uses a rolling median of recent comparable runs, with no seasonality and a minimum of three runs.
+8. **Baselines are simple.** Row-drop and duplicate-spike detection use a rolling median of recent comparable hours, with no seasonality and a minimum of three. The duplicate-spike defaults (10 duplicates, 2%, 5x the baseline) are my choice and have not been tuned on real data; only duplicates removed by deduplication are counted, not records rejected for other reasons.
 
 9. **SMTP is tested with a stand-in.** Tests cover credentials-from-environment, failure handling and the file sink. I did not verify delivery to a live Mailpit or SMTP server.
 
@@ -24,12 +24,16 @@
 
 12. **Quarantine is evidence, not a workflow.** Rows are stored and reported, but there is no alert on a high quarantine rate, no retention or purge, and no release or reprocess step for a single record (replay is per hour via `--reload-raw`). A fetch that never returned a page has nothing to quarantine and shows only as `failed` or `partial`. Values normalised to NULL are not quarantined.
 
-13. **Gold is views, not materialised tables.** They are recomputed on every read, which is fine at this scale and the first thing to change at 100x. Brand-level organic-versus-sponsored comparison is not built (the output record has no brand field); the comparison is per product id. Rank-movement reporting is not built.
+13. **Gold is views, not materialised tables.** They are recomputed on every read, which is fine at this scale and the first thing to change at 100x. Rank-movement reporting is not built.
 
-14. **Test duration.** The clean-clone runs on my Windows machine took 375.12 seconds (86 tests), 470.30 seconds (94 tests) and 518.33 seconds (113 tests). I have not investigated why. With dependency installation and the demo added, a fresh setup on a similar machine may take longer than 10 minutes. The 35 tests that write no files run in a few seconds (command in the README).
+14. **Test duration.** The clean-clone runs on my Windows machine took 375.12 seconds (86 tests), 470.30 seconds (94 tests) and 518.33 seconds (113 tests), and a later local run took 529.74 seconds. Profiling showed the cost is file-system work (about 1,400 SQLite commits and 800 fixture copies), so I made the tests run SQLite without a disk journal or fsync, share one fixture folder, and skip repeated connection setup; no assertion changed. I have not timed the suite on that machine since these changes, and a fresh setup with installation and the demo may still take long on a slow disk. `scripts/fs_benchmark.py` measures the costs on a given machine, and the 35 tests that write no files run in a few seconds (command in the README).
 
 15. **CI is basic.** One workflow runs `pytest` on Python 3.11 and 3.12 plus a mock smoke run. No linting, coverage or dependency pinning.
 
 16. **Lenient value parsing.** `parse_price` ignores an exponent (`1e5` reads as `1.00`) and strips any comma (`12,34` reads as `1234.00`). Real prices use neither, and the property tests document it, but it is not rejected.
 
 17. **Infinite scroll is not modelled.** The live search page loads results by infinite scroll in a logged-out session; the mock serves numbered pages (page 1, page 2) per keyword. How a real source would be paged was not established.
+
+18. **Brand is a simulated field.** The live search page shows a brand label under each product, but I did not inspect its markup. The mock cards carry the brand as an explicit `data-brand` attribute (or a `[data-testid='brand']` label). The brand comparison covers only units that have a brand, so its coverage is reported (`gold_brand_coverage`); equivalences beyond case, spacing and Unicode need a hand-curated entry in `config/brand_aliases.json`, and there is no brand hierarchy (parent brand, sub-brand). The displayed spelling is the one used by the brand's highest-ranked unit.
+
+19. **Older local databases are upgraded in place.** `Database.initialize()` adds the new columns (`brand`, `brand_key`, `duplicate_count`) and renames `product_image_u` to `product_image_url`. Rows written before the upgrade have no brand and no duplicate count, so they are left out of the brand comparison and of the duplicate baseline.

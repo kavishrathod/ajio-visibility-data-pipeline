@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from src.logger import get_logger
+from src.monitoring.duplicates import DEFAULTS as DUPLICATE_DEFAULTS, detect_duplicate_spike
 from src.monitoring.mailer import Mailer
 from src.pipeline.completeness import evaluate_completeness, parse_hour
 from src.storage.database import Database
@@ -24,15 +25,15 @@ from src.timeutil import slot_label
 logger = get_logger(__name__)
 
 # Highest priority first; the first active condition names the incident.
-CONDITION_ORDER = ["run_failed", "blocked", "parser_errors", "missing_slots", "completeness", "row_drop", "stale_data"]
+CONDITION_ORDER = ["run_failed", "blocked", "parser_errors", "missing_slots", "completeness", "row_drop", "duplicate_spike", "stale_data"]
 SEVERITY = {
     "run_failed": "CRITICAL", "blocked": "CRITICAL", "completeness": "CRITICAL", "stale_data": "CRITICAL",
-    "parser_errors": "WARNING", "missing_slots": "WARNING", "row_drop": "WARNING",
+    "parser_errors": "WARNING", "missing_slots": "WARNING", "row_drop": "WARNING", "duplicate_spike": "WARNING",
 }
 TITLES = {
     "run_failed": "Run failed", "blocked": "Target blocked", "parser_errors": "Parser/schema errors",
     "missing_slots": "Missing data", "completeness": "Completeness below threshold",
-    "row_drop": "Row-count drop", "stale_data": "Stale data",
+    "row_drop": "Row-count drop", "duplicate_spike": "Duplicate spike", "stale_data": "Stale data",
 }
 NEXT_STEPS = {
     "run_failed": "Open the dashboard Run history and read error_summary. Fix the cause, then backfill: python -m src.main --run-once --hour <HOUR_UTC>",
@@ -41,6 +42,7 @@ NEXT_STEPS = {
     "missing_slots": "Check whether the scheduler ran and whether an overlapping run was skipped. Backfill the hour: python -m src.main --run-once --hour <HOUR_UTC>",
     "completeness": "See the affected targets below. Rerun the hour once the cause is fixed; the incident resolves and a recovery email is sent when completeness is back above the threshold.",
     "row_drop": "Compare this run's row_count with recent runs. A genuine drop in results is possible, but also check for partial pages or layout changes.",
+    "duplicate_spike": "Open the dashboard Quarantine tab (reasons duplicate_placement and cross_page_duplicate) for the affected targets and compare the raw pages (raw_payload_ref). A sudden rise usually means pagination drift or a page that repeats placements; confirm the parser did not change, then rerun the hour.",
     "stale_data": "No successful run finished within the freshness SLA. Check that the scheduler is running (python -m src.main --schedule) and the database is reachable.",
 }
 
@@ -56,6 +58,8 @@ def _alert_settings(settings: dict[str, Any]) -> dict[str, Any]:
     cfg.setdefault("row_drop_fraction", 0.5)
     cfg.setdefault("row_baseline_runs", 6)
     cfg.setdefault("stale_sla_minutes", 120)
+    for key, default in DUPLICATE_DEFAULTS.items():
+        cfg.setdefault(key, default)
     cfg.setdefault("dashboard_url", "http://localhost:8501")
     return cfg
 
@@ -107,6 +111,18 @@ def detect_conditions(db: Database, settings: dict[str, Any], result: dict[str, 
             baseline = statistics.median(r["row_count"] for r in history)
             if run["row_count"] < baseline * (1 - float(cfg["row_drop_fraction"])):
                 conditions.append({"type": "row_drop", "targets": [], "reason": f"Run {run['run_id']} wrote {run['row_count']} rows; the rolling median of the last {len(history)} comparable runs is {baseline:g}."})
+    spike = detect_duplicate_spike(db, cfg, platform, hour)
+    if spike:
+        baseline_text = (f"{spike['threshold_rate'] * 100:.1f}% ({float(cfg['duplicate_spike_multiplier']):g}x the rolling median {spike['baseline_rate'] * 100:.2f}% of the previous {spike['baseline_hours']} complete hours)"
+                         if spike["baseline_rate"] is not None and spike["threshold_rate"] > float(cfg["duplicate_spike_min_rate"])
+                         else f"{spike['threshold_rate'] * 100:.1f}%")
+        conditions.append({
+            "type": "duplicate_spike",
+            "targets": [{"keyword": a["keyword"], "status": a["status"], "reason": f"{a['duplicates']} duplicate placement(s) dropped"} for a in spike["affected"]],
+            "reason": (f"{spike['duplicates']} repeated placements were dropped across {len(spike['affected'])} target(s): "
+                       f"{spike['rate'] * 100:.1f}% of {spike['duplicates'] + spike['kept']} units seen, at or above the spike threshold of {baseline_text} "
+                       f"(and at least {spike['min_count']} duplicates)."),
+        })
     sla = int(cfg["stale_sla_minutes"] or 0)
     if sla and parse_hour(hour) >= parse_hour(now) - timedelta(hours=1):
         last = db.query("SELECT MAX(finished_at) AS f FROM scrape_run WHERE platform=? AND status='success'", (platform,))[0]["f"]

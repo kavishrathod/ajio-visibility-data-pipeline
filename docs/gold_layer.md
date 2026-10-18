@@ -14,16 +14,20 @@ Gold is a set of read-only SQL views defined in `sql/schema.sql`. All data is sy
 
 | View | Grain | Answers |
 |---|---|---|
-| `gold_hour_summary` | platform, hour | Coverage and volume: targets, complete, zero_result, missing, problem, pending, rows, completeness_pct |
+| `gold_hour_summary` | platform, hour | Coverage and volume: targets, complete, zero_result, missing, problem, pending, rows, duplicates, duplicate_rate_pct, completeness_pct |
 | `gold_keyword_hour` | keyword, hour | Unit mix (organic, SP, SB), paid share, distinct products, min/avg/max selling price, average rating. Built from the status ledger, so a genuine zero-result keyword appears with 0 units and status `zero_result`, and a missing one is visible |
+| `gold_brand_placement` | brand, keyword, hour | For each brand: organic units and best organic rank, sponsored-product units and best sponsored rank, sponsored-brand banners, the first paid and first organic page position, `paid_position_gain` (places the first paid unit sits above the best organic unit; negative when organic is higher), and `paid_only` (paid units but no organic). The displayed brand is the spelling of the brand's highest-ranked unit |
+| `gold_brand_coverage` | hour | Units, units with a brand, and the percentage. The brand comparison covers only units that have a brand |
 | `gold_quarantine_summary` | platform, hour, reason | Records rejected on the way to Silver, by record type, stage and reason code, counting only the latest attempt per target-hour (`docs/quarantine.md`) |
 | `gold_product_placement` | product, keyword, hour | Best organic rank vs best sponsored rank for the same product, and how many placements of each. Both set = the product was shown as organic and as a paid unit (I-6) |
 
 ## Limits
 - `gold_hour_summary` reflects statuses that have been written. A target that was never run has no row until
   `--check-completeness` (or the scheduler) materialises it as `missing`.
-- Brand-level comparison is not modelled. The output record has no brand field, and parsing a brand out of
-  `product_name` would be a guess. Product-level comparison uses `product_id`, which is reliable.
+- A brand comes only from an explicit brand label on the card, never from `product_name`; units without one are left
+  out of the brand view and counted in `gold_brand_coverage`. The product-level comparison (`gold_product_placement`)
+  uses `product_id`. There is no brand hierarchy, and equivalences beyond case, spacing and Unicode are curated by hand
+  in `config/brand_aliases.json`.
 - Rank movement across hours is not built (listed stretch work).
 
 ## Try it

@@ -45,6 +45,7 @@ class ProductUnit:
     deal: str = ""
     product_image_url: Optional[str] = None
     campaign_id: Optional[str] = None
+    brand: Optional[str] = None  # brand text as the page shows it (explicit field only, never taken from the title)
 
 
 @dataclass
@@ -269,6 +270,7 @@ def parse_products(body: str, http_status: int = 200) -> ParseResult:
             deal=_field(card, "data-deal") or "",
             product_image_url=image_url,
             campaign_id=_field(card, "data-campaign-id"),
+            brand=_field(card, "data-brand", "[data-testid='brand']"),
         ))
 
     if not units:

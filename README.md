@@ -45,6 +45,12 @@ alert/recovery incidents.
     organic-vs-sponsored rank per product, and quarantine counts.
 -   GitHub Actions CI runs the test suite and a mock smoke run on every
     push.
+-   Duplicate-spike alert: repeated placements dropped per target-hour are
+    counted, and an hour whose duplicate count and rate are anomalous opens
+    an incident (thresholds in `docs/duplicate_spike.md`).
+-   A normalized `brand` field, taken only from an explicit brand label
+    (never from the product title), and a Gold view comparing each
+    brand's organic rank with its sponsored placements.
 -   Property-based tests (Hypothesis) for the value parsers, product key,
     deduplication and rank assignment; see
     [`docs/property_tests.md`](docs/property_tests.md).
@@ -122,6 +128,9 @@ python -m streamlit run src/dashboard/app.py
   duplicate rows                      target+rank)
 
   List quarantined records            `python scripts/show_quarantine.py --details`
+
+  Measure file-system and SQLite     `python scripts/fs_benchmark.py`
+  costs on this machine
   ----------------------------------------------------------------------------------------------------------------
 
 `scheduled_hour` is the intended IST hour, stored as a UTC instant;
@@ -190,8 +199,8 @@ behaviour, never from a process exit code.
 Missing terminal statuses after the configured grace period are flagged.
 
 The alert system checks conditions including failed runs, missing slots,
-low completeness, parser/schema errors, row-count drops, stale data, and
-blocked targets. Conditions are aggregated per platform-hour to reduce
+low completeness, parser/schema errors, row-count drops, duplicate spikes,
+stale data, and blocked targets. Conditions are aggregated per platform-hour to reduce
 alert storms. Repeated checks are deduplicated according to incident
 state/cooldown; a healthy backfill can resolve the incident and generate
 a recovery email.
@@ -253,18 +262,19 @@ Run:
 python -m pytest -q
 ```
 
-The suite has 113 tests, 19 of them property-based (see
+The suite has 143 tests, 21 of them property-based (see
 [`docs/property_tests.md`](docs/property_tests.md)). GitHub Actions runs
 `pytest` and a mock smoke run on every push.
 
-I verified the committed code in a clean clone on Windows: a fresh
-`git clone`, a new virtual environment, dependencies installed from
+I verified an earlier commit (113 tests) in a clean clone on Windows: a
+fresh `git clone`, a new virtual environment, dependencies installed from
 `requirements.txt`, then the full suite and the demo.
 
 -   `python -m pytest -q`: **113 passed in 518.33 seconds**. Earlier
     clean-clone runs took 375.12 seconds (86 tests) and 470.30 seconds
-    (94 tests). I have not investigated why the suite is slow on this
-    machine.
+    (94 tests), and a later local run took 529.74 seconds. The suite is
+    fast on a quick disk, so the time points to file-system cost on this
+    machine (see below).
 -   `python -m src.main --demo` completed successfully: 50 targets per
     slot, 48 `success`, 2 `zero_result`, 1,616 rows written/upserted per
     slot, missing-slot detection, repeated-alert aggregation, late
@@ -275,8 +285,28 @@ I verified the committed code in a clean clone on Windows: a fresh
     and the other 48 keywords are `success`, so every hour has 48 + 2 = 50
     targets complete.
 
-These are mock-environment results, not live AJIO observations. To run
-only the tests that do not write files (35 tests, a few seconds):
+These are mock-environment results, not live AJIO observations.
+
+### Test-suite speed
+
+Profiling the suite showed where the time goes: about 1,400 SQLite
+commits (each creates and deletes a journal file and syncs to disk),
+about 2,000 connections, and 800 fixture-file copies. I reduced that
+without changing any assertion:
+
+-   Tests run SQLite with an in-memory journal and no fsync
+    (`AJIO_SQLITE_FAST=1`, set only in `tests/conftest.py`). Production keeps
+    SQLite's durable defaults; `tests/test_sqlite_settings.py` checks both.
+-   Tests share the repository's fixture folder (`settings.fixtures_dir`)
+    instead of copying 20 files into every temporary project: 100 copies
+    instead of 800.
+-   The database connection no longer creates its folder or sets a
+    duplicate busy timeout on every call.
+
+`python scripts/fs_benchmark.py` times file creation and SQLite commits in
+the system temp folder and in the project folder, so a slow location or
+slow disk sync shows up as numbers. To run only the tests that do not
+write files (35 tests, a few seconds):
 
 ``` bash
 python -m pytest -q tests/test_properties.py tests/test_parsing.py tests/test_ranking.py tests/test_jsonld.py

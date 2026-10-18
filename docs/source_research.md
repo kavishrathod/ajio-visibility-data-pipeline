@@ -122,6 +122,7 @@ Per the brief ("if live access is blocked or not permitted, stop, document what 
 | Grid of cards with brand, name, image, price | **Simulated.** Each card is an `<article class="product-card">` inside `[data-testid="product-grid"]`, with `data-*` attributes for price, MRP, rating, count, tag, deal, placement. The JSON-LD does not contain these fields, so this layer is invented; I did not inspect the rendered DOM |
 | An ad component (`jioAds.js`) loaded on the page | Cards carry `data-kind` = `SB`, `SP` or organic, and `data-campaign-id` on paid units. **This marker is invented for the mock; I did not verify how AJIO marks sponsored units** |
 | Result counts such as "28,073 Items Found" | Not modelled. A genuine zero-result page is a grid with no cards and an explicit no-results message |
+| Brand label under each product image | **Simulated as an explicit field.** The mock cards carry the brand as a `data-brand` attribute; I did not inspect the live markup. The pipeline never derives a brand from the product title |
 | Infinite scroll in a logged-out session | **Not modelled.** The mock serves numbered pages (page 1, page 2) per keyword, which is a simplification; how a real source would be paged is unknown |
 | Client-side rendering: skeleton loaders, then fetch calls | **Not modelled.** The mock returns static HTML with the grid already present, which is a simplification. The JSON-LD block is the only layer that exists in the page source as observed |
 

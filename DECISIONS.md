@@ -4,6 +4,8 @@
 
 **Choice:** I used the placement labels available in my mock pages to distinguish Sponsored Brand (SB), Sponsored Product (SP), and Organic results. I store the product type separately from the rank so that sponsored and organic placements are not treated as the same type of result. I also inspected the page source and embedded JSON-LD during source research, but JSON-LD alone was not sufficient evidence to identify every placement type.
 
+Brands follow the same rule. The live page shows a brand label under each product, so the mock cards carry an explicit brand field, and the pipeline stores a cleaned `brand` and a normalized `brand_key`. I never infer a brand from the product title, because title prefixes do not follow one rule; a card without a brand label has a NULL brand and is left out of the brand comparison, and the share of units with a brand is reported. Variants that differ only in case, spacing or Unicode share a key, and any other equivalence (for example "U.S. Polo Assn." and "US Polo Assn") is a hand-curated entry in `config/brand_aliases.json`.
+
 **Alternative rejected:** I rejected inferring product type from rank or product position alone because an item appearing first does not prove that it is sponsored.
 
 **Limitation:** My automated pipeline uses labelled mock data. I did not verify the live AJIO rendered DOM or establish that its actual sponsored-placement markers follow the same contract. I therefore do not claim that the pipeline is collecting verified live AJIO placements.
@@ -15,6 +17,8 @@
 **Alternative rejected:** I rejected inserting every collected row as a new record because retries, backfills, and rerunning an hour would inflate counts and corrupt the results.
 
 **What happens on a rerun:** The pipeline can process the same hour again without duplicating the same placements. Raw collection evidence and run history are retained separately from the normalized results, so a rerun does not mean that all evidence of the earlier attempt is discarded.
+
+**Duplicate spikes:** each target-hour records how many repeated placements it dropped (`duplicate_count`). An hour is a spike when it has at least 10 duplicates, they are at least 2% of the units seen, and that rate is at least 5 times the rolling median of the previous complete hours (used once three exist). I chose a count floor and a rate floor because a few repeats are normal and a tiny hour could otherwise reach a high rate; I added the baseline so a stable duplicate rate does not alert every hour. The defaults are my own and have not been tuned on real data. A spike opens an incident like the other triggers (aggregated, cooldown, one recovery); details are in `docs/duplicate_spike.md`.
 
 **Limitation:** Deduplication depends on having a usable product identity. If a product has neither a reliable ID nor a usable URL, identity matching becomes less reliable.
 

@@ -14,6 +14,7 @@ counterexample and shrinks it to the smallest failing input.
 | `product_key` | The key ignores the title slug and any tracking parameters |
 | deduplication | One unit per placement and the first occurrence wins; idempotent; the title alone never decides a duplicate; the same product as SP and Organic stays two placements |
 | `validate_entries` | Every entry is accepted or rejected exactly once (nothing vanishes); agrees with the older `validate_units`; `duplicate_placement` versus `cross_page_duplicate` matches whether the pages differ |
+| brand normalization (`tests/test_brand.py`) | Normalizing twice changes nothing and never returns an empty brand; the grouping key ignores case and padding |
 | `assign_ranks` | Absolute and per-type ranks are continuous, and splitting results into pages never changes them |
 
 ## Bugs the properties found

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -12,17 +13,25 @@ def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
+# Set to "1" by the test configuration only: keeps SQLite's rollback journal in memory and skips fsync, which
+# removes a journal file create/delete and two disk syncs from every commit. Never set outside tests.
+FAST_SQLITE_ENV = "AJIO_SQLITE_FAST"
+
+
 class Database:
     def __init__(self, path: str | Path, project_root: str | Path) -> None:
         self.path = Path(path)
         self.project_root = Path(project_root)
 
     def connect(self) -> sqlite3.Connection:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(self.path, timeout=15)
+        if not self.path.parent.is_dir():
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(self.path, timeout=15)  # timeout also sets SQLite's busy timeout (15 s)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
-        conn.execute("PRAGMA busy_timeout = 15000")
+        if os.getenv(FAST_SQLITE_ENV) == "1":
+            conn.execute("PRAGMA journal_mode = MEMORY")
+            conn.execute("PRAGMA synchronous = OFF")
         return conn
 
     def initialize(self) -> None:
@@ -30,13 +39,18 @@ class Database:
         if not schema_path.is_file():
             raise FileNotFoundError(f"Schema not found: {schema_path}")
         with self.connect() as conn:
-            conn.executescript(schema_path.read_text(encoding="utf-8"))
+            # Upgrade tables from older versions first: the schema script then recreates the views against the new
+            # columns (SQLite checks every view when a column is renamed, so the views must not be ahead of the tables).
             self._migrate(conn)
+            conn.executescript(schema_path.read_text(encoding="utf-8"))
 
     # Columns added after the first schema version. ``CREATE TABLE IF NOT EXISTS``
     # never alters an existing table, so older local databases are upgraded here.
     _ADDED_COLUMNS = (
         ("target_hour_status", "anomalies", "TEXT"),
+        ("target_hour_status", "duplicate_count", "INTEGER"),
+        ("visibility_product", "brand", "TEXT"),
+        ("visibility_product", "brand_key", "TEXT"),
         ("alert_incident", "run_id", "TEXT"),
         ("alert_incident", "fingerprint", "TEXT"),
         ("alert_incident", "conditions", "TEXT"),
@@ -44,9 +58,13 @@ class Database:
     )
 
     def _migrate(self, conn: sqlite3.Connection) -> None:
+        # The image column was first created as ``product_image_u``; the brief's field name is ``product_image_url``.
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(visibility_product)").fetchall()}
+        if "product_image_u" in columns and "product_image_url" not in columns:
+            conn.execute("ALTER TABLE visibility_product RENAME COLUMN product_image_u TO product_image_url")
         for table, column, ddl in self._ADDED_COLUMNS:
             existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
-            if column not in existing:
+            if existing and column not in existing:  # no columns = the table does not exist yet (a new database)
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
 
     def ensure_targets(self, targets: dict[str, Any]) -> list[dict[str, Any]]:
@@ -137,20 +155,20 @@ class Database:
             )
 
     def upsert_status(self, record: dict[str, Any]) -> None:
-        record = {"anomalies": None, **record}
+        record = {"anomalies": None, "duplicate_count": None, **record}
         with self.connect() as conn:
             conn.execute(
                 """INSERT INTO target_hour_status
                 (platform,target_id,scheduled_hour,status,expected,observed,row_count,first_seen_at,checked_at,
-                 missing_reason,incident_id,last_run_id,parse_error_count,anomalies,is_mock)
+                 missing_reason,incident_id,last_run_id,parse_error_count,anomalies,duplicate_count,is_mock)
                 VALUES (:platform,:target_id,:scheduled_hour,:status,:expected,:observed,:row_count,:first_seen_at,
-                 :checked_at,:missing_reason,:incident_id,:last_run_id,:parse_error_count,:anomalies,:is_mock)
+                 :checked_at,:missing_reason,:incident_id,:last_run_id,:parse_error_count,:anomalies,:duplicate_count,:is_mock)
                 ON CONFLICT(platform,target_id,scheduled_hour) DO UPDATE SET
                   status=excluded.status, expected=excluded.expected, observed=excluded.observed,
                   row_count=excluded.row_count, checked_at=excluded.checked_at,
                   missing_reason=excluded.missing_reason, incident_id=excluded.incident_id,
                   last_run_id=excluded.last_run_id, parse_error_count=excluded.parse_error_count,
-                  anomalies=excluded.anomalies, is_mock=excluded.is_mock""",
+                  anomalies=excluded.anomalies, duplicate_count=excluded.duplicate_count, is_mock=excluded.is_mock""",
                 record,
             )
 
@@ -159,7 +177,7 @@ class Database:
         fields = (
             "time_stamp", "platform", "platform_code", "keyword", "product_name", "sp", "mrp", "rating",
             "num_of_rating", "tag", "deal", "product_image_url", "absolute_rank", "relative_rank", "product_type",
-            "campaign_id", "product_id", "product_url", "run_id", "target_id", "scheduled_hour", "page_number",
+            "campaign_id", "product_id", "product_url", "brand", "brand_key", "run_id", "target_id", "scheduled_hour", "page_number",
             "raw_payload_ref", "parse_status", "is_mock",
         )
         update_fields = [f for f in fields if f not in {"platform", "target_id", "scheduled_hour", "absolute_rank"}]

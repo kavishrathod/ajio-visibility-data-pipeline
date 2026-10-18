@@ -22,6 +22,10 @@ alerts:
   parser_error_threshold: 1
   row_drop_fraction: 0.5    # alert when a run writes less than 50% of the rolling median
   row_baseline_runs: 6
+  duplicate_spike_min_count: 10     # ignore a handful of repeated placements
+  duplicate_spike_min_rate: 0.02    # and require duplicates >= 2% of the units seen in the hour
+  duplicate_spike_multiplier: 5     # and at least 5x the rolling median rate of earlier complete hours
+  duplicate_baseline_runs: 6        # (the baseline is used once 3 such hours exist)
   stale_sla_minutes: 120
   dashboard_url: http://localhost:8501
 mock_fixtures:

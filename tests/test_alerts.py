@@ -93,7 +93,7 @@ def _run_hour(config, hour, adapter=None):
 
 def test_row_count_drop_against_rolling_baseline(tmp_path):
     config = isolated_config(tmp_path, ["men black jeans"])
-    generated = MockAdapter(config.root / "tests" / "fixtures", generate=True)
+    generated = MockAdapter(config.fixtures_dir, generate=True)
     for hour in ("2026-10-16T08:30:00Z", "2026-10-16T09:30:00Z", "2026-10-16T10:30:00Z"):
         assert _run_hour(config, hour, generated)["rows_written_or_upserted"] == 35
 
@@ -110,7 +110,7 @@ def test_row_count_drop_against_rolling_baseline(tmp_path):
 
 def test_no_row_drop_alert_without_enough_baseline(tmp_path):
     config = isolated_config(tmp_path, ["men black jeans"])
-    generated = MockAdapter(config.root / "tests" / "fixtures", generate=True)
+    generated = MockAdapter(config.fixtures_dir, generate=True)
     for hour in ("2026-10-16T08:30:00Z", "2026-10-16T09:30:00Z"):
         _run_hour(config, hour, generated)
 

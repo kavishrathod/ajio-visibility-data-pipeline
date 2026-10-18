@@ -30,7 +30,7 @@ def _db(config):
 # ---------------------------------------------------------------- I-4 pagination drift
 def test_i4_pagination_drift_keeps_first_occurrence_and_records_anomaly(tmp_path):
     config = isolated_config(tmp_path, ["men black jeans"])
-    adapter = MockAdapter(config.root / "tests" / "fixtures", page_mapping={
+    adapter = MockAdapter(config.fixtures_dir, page_mapping={
         ("men black jeans", 1): "pagination_drift_page1.html", ("men black jeans", 2): "pagination_drift_page2.html"})
     summary = run_pipeline(config, HOUR, adapter_override=adapter, sleeper=no_sleep)
     db = _db(config)
@@ -44,7 +44,7 @@ def test_i4_pagination_drift_keeps_first_occurrence_and_records_anomaly(tmp_path
 
 def test_i4_no_anomaly_for_clean_pagination(tmp_path):
     config = isolated_config(tmp_path, ["men black jeans"])
-    summary = run_pipeline(config, HOUR, adapter_override=MockAdapter(config.root / "tests" / "fixtures", generate=True), sleeper=no_sleep)
+    summary = run_pipeline(config, HOUR, adapter_override=MockAdapter(config.fixtures_dir, generate=True), sleeper=no_sleep)
     assert summary["pagination_anomalies"] == 0
     assert _db(config).query("SELECT anomalies FROM target_hour_status")[0]["anomalies"] is None
 
@@ -261,7 +261,7 @@ def test_i11_lock_left_behind_by_a_finished_run_does_not_block_the_next_run(tmp_
 def test_i12_forty_failures_produce_one_aggregated_email(tmp_path):
     config = isolated_config(tmp_path)  # all 50 configured keywords
     failing = set(config.keywords[:40])
-    inner = MockAdapter(config.root / "tests" / "fixtures", mapping=config.settings["mock_fixtures"], generate=True)
+    inner = MockAdapter(config.fixtures_dir, mapping=config.settings["mock_fixtures"], generate=True)
 
     def fn(keyword, page, n):
         if keyword in failing:

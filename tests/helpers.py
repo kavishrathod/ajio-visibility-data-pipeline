@@ -15,7 +15,6 @@ def isolated_config(tmp_path: Path, keywords: list[str] | None = None, stale_sla
     root = tmp_path / "ajio-project"
     (root / "config").mkdir(parents=True)
     (root / "sql").mkdir(parents=True)
-    (root / "tests" / "fixtures").mkdir(parents=True)
     project_root = Path(__file__).resolve().parents[1]
     shutil.copy2(project_root / "config" / "settings.yaml", root / "config" / "settings.yaml")
     targets = json.loads((project_root / "config" / "targets.json").read_text(encoding="utf-8"))
@@ -24,9 +23,9 @@ def isolated_config(tmp_path: Path, keywords: list[str] | None = None, stale_sla
         targets["expected_zero_result_keywords"] = [kw for kw in keywords if kw in {"zxqvbn shirt", "asdfgh qwerty zzzz"}]
     (root / "config" / "targets.json").write_text(json.dumps(targets, indent=2), encoding="utf-8")
     shutil.copy2(project_root / "sql" / "schema.sql", root / "sql" / "schema.sql")
-    for fixture in (project_root / "tests" / "fixtures").glob("*.html"):
-        shutil.copy2(fixture, root / "tests" / "fixtures" / fixture.name)
     config = load_config(root)
+    # Fixtures are read-only, so every test shares the repository copy instead of copying 20 files each.
+    config.settings["fixtures_dir"] = str(project_root / "tests" / "fixtures")
     config.settings.setdefault("alerts", {})["stale_sla_minutes"] = stale_sla_minutes
     config.settings.setdefault("rate_limit", {})["enabled"] = False  # politeness has its own tests
     return config

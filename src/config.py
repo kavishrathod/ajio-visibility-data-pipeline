@@ -31,6 +31,12 @@ class AppConfig:
         return list(self.targets.get("keywords", []))
 
     @property
+    def fixtures_dir(self) -> Path:
+        """Where the mock adapter reads fixtures. ``settings.fixtures_dir`` may point elsewhere (tests share one copy)."""
+        configured = self.settings.get("fixtures_dir")
+        return Path(configured) if configured else self.root / "tests" / "fixtures"
+
+    @property
     def max_pages(self) -> int:
         return max(1, int(self.settings.get("max_pages", self.targets.get("max_pages", 1))))
 

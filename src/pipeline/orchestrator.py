@@ -28,6 +28,7 @@ from src.parsers.product_parser import ProductUnit, parse_products
 from src.pipeline.completeness import format_hour
 from src.timeutil import IST, parse_utc
 from src.pipeline.ranking import assign_ranks
+from src.pipeline.brands import load_brand_aliases, normalize_brand
 from src.pipeline.validator import find_cross_page_duplicates, validate_entries
 from src.storage.database import Database, utc_now_iso
 
@@ -43,7 +44,7 @@ def _adapter(config: AppConfig) -> Adapter:
     if mode == "live":
         return AjioAdapter()
     return MockAdapter(
-        config.root / "tests" / "fixtures",
+        config.fixtures_dir,
         mapping=config.settings.get("mock_fixtures", {}),
         generate=bool(config.settings.get("mock_generator", False)),
     )
@@ -204,6 +205,7 @@ def run_pipeline(
     db_errors: list[str] = []
     status_counts: dict[str, int] = {}
     quarantined_total = 0
+    brand_aliases = load_brand_aliases(config.root)
     quarantine_reasons: dict[str, int] = {}
 
     def safe(label: str, fn, *args, **kwargs) -> bool:
@@ -337,6 +339,7 @@ def run_pipeline(
             rank_pairs, _ = assign_ranks([entry["unit"].product_type for entry in accepted_entries])
             for entry, (absolute_rank, relative_rank) in zip(accepted_entries, rank_pairs):
                 unit: ProductUnit = entry["unit"]
+                brand, brand_key = normalize_brand(unit.brand, brand_aliases)
                 output_records.append({
                     "time_stamp": entry["time_stamp"],
                     "platform": config.platform,
@@ -356,6 +359,8 @@ def run_pipeline(
                     "campaign_id": unit.campaign_id,
                     "product_id": unit.product_id,
                     "product_url": unit.product_url,
+                    "brand": brand,
+                    "brand_key": brand_key,
                     "run_id": run_id,
                     "target_id": target_id,
                     "scheduled_hour": hour_text,
@@ -413,6 +418,7 @@ def run_pipeline(
                 "last_run_id": run_id,
                 "parse_error_count": parse_errors,
                 "anomalies": json.dumps(drift) if drift else None,
+                "duplicate_count": duplicate_count,
                 "is_mock": mock_flag,
             })
 

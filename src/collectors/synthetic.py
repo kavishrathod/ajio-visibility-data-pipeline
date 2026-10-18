@@ -48,6 +48,7 @@ class SyntheticUnit:
     deal: str
     image: str
     campaign_id: str | None
+    brand: str | None = None   # explicit brand label shown on the card (simulated)
 
 
 def _money(rng: random.Random, amount: int) -> str:
@@ -66,6 +67,16 @@ def _count(rng: random.Random, n: int) -> str:
     if style == 1:
         return f"({n:,})"
     return f"{n / 1000:.1f}K" if n >= 1000 else str(n)
+
+
+def _brand_label(brand: str, keyword: str, index: int) -> str:
+    """The brand as a page might print it: usually clean, sometimes upper-cased or padded (exercises normalisation)."""
+    variant = _rng("brand-label", keyword, index).random()
+    if variant < 0.10:
+        return brand.upper()
+    if variant < 0.20:
+        return f"  {brand} "
+    return brand
 
 
 def _product(keyword: str, index: int, slot: str, kind: str, campaign_id: str | None = None) -> SyntheticUnit:
@@ -88,6 +99,7 @@ def _product(keyword: str, index: int, slot: str, kind: str, campaign_id: str | 
     name = f"Mock {brand} {keyword.title()} #{index + 1}"
     slug = _slug(name)
     return SyntheticUnit(
+        brand=_brand_label(brand, keyword, index),
         kind=kind,
         name=name,
         product_id=pid,
@@ -117,6 +129,7 @@ def build_listing(keyword: str, slot: str) -> list[SyntheticUnit]:
         kind="SB", name=f"{brand} Mock Brand Banner", product_id=None, url=None, price=None, mrp=None,
         rating=None, rating_count=None, tag="", deal="", image=f"https://example.invalid/banner/{_slug(brand)}.jpg",
         campaign_id=f"MOCK-CMP-{_rng('cmp', keyword).randrange(100, 999)}",
+        brand=brand,
     )
     sponsored = []
     for n, _ in enumerate(SP_POSITIONS):
@@ -157,6 +170,7 @@ def _card(unit: SyntheticUnit) -> str:
         "data-deal": unit.deal or None,
         "data-image": unit.image if is_banner else None,
         "data-campaign-id": unit.campaign_id,
+        "data-brand": unit.brand,
     }
     rendered = " ".join(f'{k}="{escape(str(v), quote=True)}"' for k, v in attrs.items() if v)
     inner = f"<h2>{escape(unit.name)}</h2>" if is_banner else ""

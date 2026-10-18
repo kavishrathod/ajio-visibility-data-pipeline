@@ -27,6 +27,10 @@ screenshots show the MOCK DATA ONLY banner.
 
 ## Other checks
 
+- Duplicate spike: `python -m pytest -q tests/test_duplicate_spike.py` (detection, thresholds, baseline, recovery).
+- Brand comparison: `python -m pytest -q tests/test_brand.py`; dashboard, Gold aggregates tab, *Brand: organic rank versus sponsored placements*.
+- Test-suite cost on a given machine: `python scripts/fs_benchmark.py`.
+
 - Idempotency: run the same hour twice, then `python scripts/check_idempotency.py`. Rows per slot equal the
   distinct target and rank count.
 - Clean clone: results are recorded in the README (113 passed, demo ran, coverage grid exported to CSV and checked).
