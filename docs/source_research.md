@@ -50,6 +50,14 @@ Seen directly: brand and product image. Product title and price sit below the vi
 
 In a logged-out session the results load by infinite scroll, in a grid of three products per row; I saw no numbered pages. I did not record how many items load per scroll or whether the URL changes.
 
+### 1.6 Pincode and delivery checks
+
+During inspection, I did not observe a direct pincode-check control on the main search-results page. When I opened an individual white kurta product, I selected a size and entered a pincode in the product page's delivery-check flow. This documents the delivery-check behaviour observed for the inspected product. I did not compare search-result listings across multiple pincodes, so whether pincode affects product visibility or ranking remains unverified.
+
+### 1.7 Sponsored product identification
+
+On an inspected product unit in the search results, I observed an "Ad" label in the top-left corner of the product image. I use this visible label as evidence for identifying that product unit as a sponsored product (SP). I did not independently verify a sponsored brand banner (SB) during this inspection. Any SB placements in the mock adapter are simulated and are labelled accordingly.
+
 ---
 
 ## 2. What I could not and did not access, and why
