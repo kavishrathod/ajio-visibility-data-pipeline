@@ -50,9 +50,26 @@ Seen directly: brand and product image. Product title and price sit below the vi
 
 In a logged-out session the results load by infinite scroll, in a grid of three products per row; I saw no numbered pages. I did not record how many items load per scroll or whether the URL changes.
 
-### 1.6 Pincode and delivery checks
+### 1.6 Pincode, Size and Delivery Checks
 
-During inspection, I did not observe a direct pincode-check control on the main search-results page. When I opened an individual white kurta product, I selected a size and entered a pincode in the product page's delivery-check flow. This documents the delivery-check behaviour observed for the inspected product. I did not compare search-result listings across multiple pincodes, so whether pincode affects product visibility or ranking remains unverified.
+I inspected the search results for **“white kurta for man”** and opened an individual product to examine its size-selection and delivery-check functionality.
+
+During the inspection, I did not observe a direct pincode-check control on the main search-results page. I therefore performed the delivery checks on the individual product page.
+
+**Tests performed:**
+- Changed the size and pincode multiple times for the same product.
+- Kept the size constant while changing the pincode.
+- Kept the pincode constant while changing the size.
+- Returned to the search-results page after changing the pincode to check whether the selected pincode was visible or whether the product listing had changed.
+
+**Observed results:**
+- The displayed delivery date remained unchanged across the variations tested.
+- The selected pincode was not visible on the search-results page after returning from the product page.
+- The product listing appeared unchanged after the pincode was changed.
+
+**Conclusion:**
+
+The inspection confirmed that size and pincode variations did not change the displayed delivery date for the tested product. However, I could not verify whether the selected pincode was applied in the search-results context or whether pincode influences product visibility or ranking. These behaviours remain unverified based on the checks performed.
 
 ### 1.7 Sponsored product identification
 
