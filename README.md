@@ -266,11 +266,11 @@ The suite has 143 tests, 21 of them property-based (see
 [`docs/property_tests.md`](docs/property_tests.md)). GitHub Actions runs
 `pytest` and a mock smoke run on every push.
 
-I verified an earlier commit (113 tests) in a clean clone on Windows: a
+Latest local test run: 143 passed in 8.83 seconds. The suite includes 21 property-based tests. GitHub Actions is configured to run the tests and a mock smoke run on pushes. in a clean clone on Windows: a
 fresh `git clone`, a new virtual environment, dependencies installed from
 `requirements.txt`, then the full suite and the demo.
 
--   `python -m pytest -q`: **113 passed in 518.33 seconds**. Earlier
+-   `python -m pytest -q`: **143 passed in 8.83 seconds**. Earlier
     clean-clone runs took 375.12 seconds (86 tests) and 470.30 seconds
     (94 tests), and a later local run took 529.74 seconds. The suite is
     fast on a quick disk, so the time points to file-system cost on this
