@@ -128,6 +128,7 @@ python -m streamlit run src/dashboard/app.py
   duplicate rows                      target+rank)
 
   List quarantined records            `python scripts/show_quarantine.py --details`
+
  Demonstrate duplicate-spike alert    `python -m scripts.demo_duplicate_spike` (separate demo database; fake mailer)
 
   Measure file-system and SQLite     `python scripts/fs_benchmark.py`
