@@ -7,7 +7,7 @@ Gold is a set of read-only SQL views defined in `sql/schema.sql`. All data is sy
 - They always agree with Silver and the status ledger, so there is nothing to refresh or reconcile.
 - A rerun or a late backfill of an hour changes the aggregates automatically and cannot create duplicate
   aggregate rows (tested in `tests/test_gold.py::test_gold_views_do_not_double_count_after_a_rerun`).
-- Cost: they are recomputed on read. At this scale (50 keywords x about 36 units x 24 hours a day) that is trivial;
+- Cost: they are recomputed on read. At this scale (50 keywords x about 32 rows x 24 hours a day) that is trivial;
   at 100x the first change would be materialising them per hour (see DECISIONS.md, question 6).
 
 ## Views

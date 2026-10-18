@@ -26,3 +26,7 @@ Rejected records for these scenarios are also kept in `quarantine_record` (see `
 | I-6 | A true duplicate of the same placement, as `duplicate_placement`; the same product as SP and Organic is not a duplicate | `test_rejected_cards_and_duplicates_are_quarantined_with_reason_and_payload` |
 | I-7 | The blocked or challenge page, as `page_blocked` | `test_unparseable_and_blocked_pages_are_quarantined_but_a_zero_result_is_not` |
 | I-11 | Rows are rebuilt by `--reload-raw`; a failed quarantine write never changes a status | `test_reload_raw_rebuilds_quarantine_without_refetching`, `test_a_failed_quarantine_write_never_changes_the_target_status` |
+
+## Property-based coverage
+
+Generated-input tests in `tests/test_properties.py` (see `docs/property_tests.md`) also exercise I-3 (rank continuity across pages), I-5 (price, count and rating parsing) and I-6 (the placement key and deduplication) beyond the fixed fixtures. They found and led to fixes of two parser bugs: an out-of-range rating read as a fragment of itself, and a wrong product key for a URL whose title slug is `p`.

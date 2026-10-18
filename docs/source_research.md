@@ -40,15 +40,15 @@ https://www.ajio.com/search/?text=white+kurta+for+men&itm_source=search&itm_sour
 - On first load the page shows **grey skeleton placeholders** before any product appears (screenshot 1). Content is therefore filled in **client-side**, not delivered as finished HTML.
 - The Network tab shows many `fetch` requests initiated by `fetchWrapper.mjs`, a service worker (`sw.js`) and framework bundles (`desktop-libraries`, `desktop-vendors`). Product images are loaded afterwards as separate fetches (for example `vastrado_white_men_slim_fit_kurta.jpg`).
 - An ad-related script (`jioAds.js`) is loaded on the page. I did not inspect it. It suggests that sponsored placements are served through an ad component, but I have **not verified** how sponsored units are marked in the page.
-- Page-source check: I opened `view-source:` for the same URL in a separate tab. **[VERIFY and fill in: was the product grid present in the raw HTML, or was it empty / only a script payload? Write exactly what you saw.]**
+- Page-source check: I opened `view-source:` for the same URL in a separate tab and searched for a product name from the results ("Vastrado"). It appears inside an embedded `<script type="application/ld+json">` block holding a schema.org `ItemList` (name, image, URL and position for each product, plus a total item count). I did not otherwise analyse whether the rendered product cards are present in the raw HTML.
 
 ### 1.4 Fields visible on a result card
 
-Seen directly: brand, product image. Product title and price sit below the visible area in my screenshots. **[VERIFY and fill in: selling price, struck-through MRP, rating, rating count, discount tag, badge such as Bestseller, any "Sponsored"/"Ad" label.]** I list a field as observed only if I saw it myself.
+Seen directly: brand and product image. Product title and price sit below the visible area in my screenshots, so I did not record the selling price, struck-through MRP, rating, rating count, discount tag, badge or any "Sponsored"/"Ad" label from the live page. Product titles are available in the JSON-LD block. I list a field as observed only if I saw it myself.
 
 ### 1.5 Pagination
 
-**[VERIFY and fill in: infinite scroll or numbered pages? how many items per load? did the URL change?]** I did not scroll through pages systematically.
+In a logged-out session the results load by infinite scroll, in a grid of three products per row; I saw no numbered pages. I did not record how many items load per scroll or whether the URL changes.
 
 ---
 
@@ -74,7 +74,7 @@ Consequences:
 
 The one brief-permitted exception, `/fc/` and `/fb/` pages with `?query=`, are category and brand-store style pages. These are not keyword search results, so they do not answer the "visibility for a keyword" question. I did not use them.
 
-**Not verified at all:** whether results vary by pincode, whether sort order changes the sponsored placement, how many units per page the live site returns in a logged-out session, and the exact markup used for sponsored units.
+**Not verified:** whether results vary by pincode, whether sort order changes the sponsored placement, and the exact markup used for sponsored units.
 
 ---
 
@@ -97,6 +97,7 @@ Per the brief ("if live access is blocked or not permitted, stop, document what 
 | Grid of cards with brand, name, image, price | **Simulated.** Each card is an `<article class="product-card">` inside `[data-testid="product-grid"]`, with `data-*` attributes for price, MRP, rating, count, tag, deal, placement. The JSON-LD does not contain these fields, so this layer is invented; I did not inspect the rendered DOM |
 | An ad component (`jioAds.js`) loaded on the page | Cards carry `data-kind` = `SB`, `SP` or organic, and `data-campaign-id` on paid units. **This marker is invented for the mock; I did not verify how AJIO marks sponsored units** |
 | Result counts such as "28,073 Items Found" | Not modelled. A genuine zero-result page is a grid with no cards and an explicit no-results message |
+| Infinite scroll in a logged-out session | **Not modelled.** The mock serves numbered pages (page 1, page 2) per keyword, which is a simplification; how a real source would be paged is unknown |
 | Client-side rendering: skeleton loaders, then fetch calls | **Not modelled.** The mock returns static HTML with the grid already present, which is a simplification. The JSON-LD block is the only layer that exists in the page source as observed |
 
 **Design rule that follows from this:** the JSON-LD cannot tell a sponsored unit from an organic one, and has no price. So it is never trusted to decide a page is healthy: a page with JSON-LD but no product grid is `parse_failed` (fixture `layout_changed_jsonld_present.html`, test `test_json_ld_does_not_rescue_a_page_whose_grid_is_missing`). A mismatch between the JSON-LD and the grid (different product at the same position, or different item counts) is logged as a parser warning.
@@ -109,7 +110,7 @@ The mock cannot support any claim about real AJIO ranking, prices, ratings or ca
 
 | Question | Assumption | Why |
 |---|---|---|
-| Pages per keyword | 2 pages, up to 20 units each in the generator (`max_pages` per target) | 50 keywords x 2 pages = 100 requests |
+| Pages per keyword | 2 pages, up to 20 units each in the generator (`max_pages` per target) | 50 keywords x 2 pages = 100 requests. The live page uses infinite scroll; two pages is an assumption |
 | Request rate | 1 request every 2 s (0.5 rps) with jittered backoff on retries; `Retry-After` honoured within a 10 s budget | 100 requests take about 200 s plus response time, far inside the hour. The mock is exempt by default since it does no network I/O |
 | Sort order | Relevance (the site default) | What a shopper sees first |
 | Pincode | Not varied; results assumed pincode-independent in the mock | Unverified on the live site |
@@ -124,4 +125,3 @@ The mock cannot support any claim about real AJIO ranking, prices, ratings or ca
 
 - All rows in the database are synthetic mock data, labelled as such.
 - Screenshots of the live site are from manual browsing only and appear as source-inspection evidence, not as extracted data.
-- Anything marked **[VERIFY]** above must be completed from my own observation before submission, and any item I did not observe stays listed as "not verified".

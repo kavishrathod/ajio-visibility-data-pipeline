@@ -1,25 +1,32 @@
-# Evidence pack: the nine screenshots
+# Evidence pack
 
-Capture each from **your own run**. Do not edit them, and keep the mock labels visible. Redact personal paths or addresses if needed.
+The screenshots are in `screenshots/`. They come from my own runs on mock data, are unedited, and the dashboard
+screenshots show the MOCK DATA ONLY banner.
 
-| # | Screenshot | How to produce it |
+## Required evidence
+
+| # | Evidence | File | How it was produced |
+|---|---|---|---|
+| 1 | Source inspection with the URL visible | `01_source.png`, `02_source_inspection.png` | Manual viewing of the AJIO search page for "white kurta for men" in Chrome, with DevTools (Network tab) open; no automation |
+| 2 | A successful run: run_id, pages, products, status | `04_successful_run.png` | `python -m src.main --run-once` (final JSON), or the dashboard Run history tab |
+| 3 | Raw snapshots in timestamped partitions | `05_bronze_raw_data.png` | `dir data\raw /s`, showing `platform=AJIO/date=.../hour=.../<run_id>/` |
+| 4 | Normalised rows with SB, SP and Organic | `06_normalized_product_records.png` | Dashboard, Visibility products tab (keyword, product_name, sp, mrp, absolute_rank, relative_rank, product_type, scheduled_hour, run_id) |
+| 5 | Scheduler with a completed run | `08_hourly_scheduler.png` | `python -m src.main --schedule` after a cycle; `config/cron.example` for the OS-scheduler alternative |
+| 6 | Dashboard coverage grid | `09_coverage_grid.png` | Dashboard, Coverage grid tab, after `--demo` |
+| 7 | A deliberately missing slot, flagged, with the incident and recovery | `09_coverage_grid.png`, `10_alert_incident_recovery.png` | One hour left uncollected, then `--check-completeness --hour <slot>`; the grid shows `missing` and Alert incidents shows the incident |
+| 8 | Alert emails | `11_alert_email_missing_data.png`, `12_alert_email_recovery.png` | Files written to `data/outbox/` by the missing-slot alert and the recovery after backfill |
+| 9 | Full test output, including the curveball tests | `14_test_results.png` | `python -m pytest -v` |
+
+## Additional screenshots
+
+| File | Shows | How it was produced |
 |---|---|---|
-| 1 | Source inspection with the URL visible | Your browser screenshots of the AJIO search page (you already have these), no personal data |
-| 2 | A successful run: run_id, pages, products, status | `python -m src.main --run-once` (final JSON), or the dashboard Run history tab |
-| 3 | Raw snapshots in timestamped partitions | File explorer or `dir data\\raw /s` showing `platform=AJIO/date=.../hour=.../<run_id>/` |
-| 4 | Normalised rows with SB, SP and Organic | Dashboard -> Visibility products; pick keyword `women saree` and the latest hour; show keyword, product_name, sp, mrp, absolute_rank, relative_rank, product_type, scheduled_hour, run_id |
-| 5 | Scheduler config/UI with a completed run | `config/cron.example` or the `--schedule` console after a cycle, next to Run history |
-| 6 | Dashboard coverage grid | Dashboard -> Coverage grid after `--demo` (or a few `--backfill-hours`) |
-| 7 | A deliberately missing slot flagged | Run `python -m src.main --run-once --hour <H-3>` and `--hour <H-1>` only, then `--check-completeness --hour <H-2>`; the grid shows `missing` in red and Alert incidents shows the open incident. (`--demo` does the same and then backfills.) |
-| 8 | Test alert email (redacted) | A file from `data/outbox/` opened in a mail client or editor, or Mailpit at http://localhost:8025 with `ALERT_SINK=smtp` |
-| 9 | Full test output including curveballs | `pytest -v` |
+| `03_dashboard_overview.png` | Dashboard overview | `python -m streamlit run src/dashboard/app.py` |
+| `07_gold_aggregates.png` | Gold aggregates tab | Dashboard, Gold aggregates tab |
+| `13_quarantine_data.png` | Quarantined records | Dashboard, Quarantine tab, or `python scripts/show_quarantine.py --details` |
 
-Optional extras that show the later additions:
+## Other checks
 
-| # | Screenshot | How to produce it |
-|---|---|---|
-| 10 | Quarantine tab | `python -m src.main --run-once`, then Dashboard -> Quarantine (or `python scripts/show_quarantine.py --details`) |
-| 11 | Idempotency proof | Run the same hour twice, then `python scripts/check_idempotency.py` |
-| 12 | Gold aggregates tab | Dashboard -> Gold aggregates |
-
-Tip: for 7, take the screenshot *before* the backfill step of `--demo`, or run the commands by hand. Every screenshot of the dashboard shows the MOCK DATA ONLY banner; keep it in frame.
+- Idempotency: run the same hour twice, then `python scripts/check_idempotency.py`. Rows per slot equal the
+  distinct target and rank count.
+- Clean clone: results are recorded in the README (113 passed, demo ran, coverage grid exported to CSV and checked).

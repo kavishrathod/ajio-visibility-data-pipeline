@@ -17,7 +17,7 @@ counterexample and shrinks it to the smallest failing input.
 | `assign_ranks` | Absolute and per-type ranks are continuous, and splitting results into pages never changes them |
 
 ## Bugs the properties found
-Both were fixed in `src/parsers/product_parser.py`.
+I fixed both in `src/parsers/product_parser.py`.
 1. **`parse_rating` read the fractional digit of an out-of-range rating on its own.** `"6.0"` returned `0.0` and
    `"7.5"` returned `5.0`, instead of null. The ordinary tests only had examples such as `"7"`.
 2. **`product_key` took the first `/p/` segment.** A title slug that is exactly `p` (`/p/p/100000_aa`) returned `p`.

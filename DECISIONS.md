@@ -10,7 +10,7 @@
 
 ## 2. Idempotency and deduplication
 
-**Choice:** I use a stable product identity, based on the available product ID or URL, together with the scheduled hour, keyword, and placement information to identify a placement. Repeated placements are detected, while different placement types for the same product can remain distinct. Database upserts and duplicate checks allow the same scheduled hour to be processed again without simply appending another copy of every row.
+**Choice:** I use a stable product identity, based on the available product ID or URL, together with the scheduled hour, keyword, and placement information to identify a placement. Repeated placements are detected, while different placement types for the same product can remain distinct. Database upserts and duplicate checks allow the same scheduled hour to be processed again without simply appending another copy of every row. Duplicates that are dropped are not lost: they are written to the quarantine table with a reason (`duplicate_placement` on the same page, `cross_page_duplicate` across pages).
 
 **Alternative rejected:** I rejected inserting every collected row as a new record because retries, backfills, and rerunning an hour would inflate counts and corrupt the results.
 
@@ -20,7 +20,7 @@
 
 ## 3. Genuine zero results versus a failed slot
 
-**Choice:** I distinguish `zero_result` from collection and parsing failures. A slot is considered a genuine zero-result slot only when the expected no-results indicator is present. A page that returns successfully but contains no usable product information is not automatically treated as empty; it can be marked `parse_failed`. Blocking, request failures, and partial pagination have separate outcomes.
+**Choice:** I distinguish `zero_result` from collection and parsing failures. A slot is considered a genuine zero-result slot only when the expected no-results indicator is present. A page that returns successfully but contains no usable product information is not automatically treated as empty; it can be marked `parse_failed`. Blocking, request failures, and partial pagination have separate outcomes. If page 1 parses and a later page fails, either because it cannot be parsed or because its fetch retries are exhausted, the slot is `partial`: the page-1 rows are kept and the slot does not count as complete. While auditing the statuses I found that an exhausted fetch on page 2 had been recorded as `failed` even though page 1 was saved, and I changed it. Pages that failed to parse or were blocked are also kept in quarantine.
 
 **Alternative rejected:** I rejected treating an empty product list as proof that no products exist because an incomplete page, changed layout, or blocked request could produce the same symptom.
 
@@ -41,6 +41,7 @@
 **Choice:** I prioritised failure scenarios that could silently corrupt the data or make monitoring misleading.
 
 - **Handled in the mock/tested implementation:** Re-running an hour without duplicating normalized placements; distinguishing explicit zero results from failures; detecting missing scheduled slots; aggregating repeated alerts and recording recovery; and quarantining rejected records with reasons rather than silently treating them as valid data.
+- **Checked with generated inputs:** property-based tests for price, count and rating parsing, the product key, deduplication and rank continuity across pages. They found two parser bugs that my example-based tests had missed: an out-of-range rating such as `7.5` was read as `5.0`, and a URL whose title slug was `p` produced the wrong product key. I fixed both.
 - **Partially handled:** Unusable pages, malformed values, pagination overlap, later-page failures, throttling/blocking, and database recovery have handling and test coverage, but the tests use fixtures or mocked behaviour rather than live AJIO requests. Pagination checks cannot detect a product missing from every returned page when there is no independent expected total.
 - **Not implemented or not fully verified:** Live AJIO collection, production-scale scheduling, a complete quarantine reprocessing workflow, quarantine retention/purge policies, and high-volume quarantine alerts. I did not attempt to bypass source restrictions to test live collection.
 
@@ -55,5 +56,7 @@
 **Alternative rejected:** I rejected adding distributed infrastructure solely to make the project look production-scale before validating the core collection, data-quality, and recovery behaviour.
 
 **What would break first:** At 100× the target count, collection time and request volume would increase first. A single process could struggle to finish within the hourly window, while SQLite writes, the single-host lock, and dashboard queries could become bottlenecks. Increasing concurrency without coordinated rate limits could also create excessive request traffic or make overlapping runs harder to control.
+
+**Worked example:** `docs/scaling_note.md` works through 20,000 targets. At two pages each that is about 40,000 pages an hour, roughly 11 requests per second, so the rate the source would accept is the first limit, before compute. The same note covers sharding, hour partitioning, per-task leases and a rough monthly cost (order-of-magnitude estimates from stated assumptions). The quarantine table would also need a retention policy, and the Gold views would need to be materialised per hour.
 
 **Next step:** I would measure runtime and database load, then move scheduling and work distribution to a durable queue, use bounded workers with coordinated rate limits, and consider a database designed for concurrent workloads. I would partition raw data by scheduled hour and make monitoring track queue lag, failed targets, and slot completeness. I would scale based on measured bottlenecks rather than simply increasing concurrency.

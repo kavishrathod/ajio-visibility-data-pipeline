@@ -39,12 +39,17 @@ alert/recovery incidents.
     alerts, and recovery handling.
 -   File-based email outbox by default; optional SMTP.
 -   Streamlit dashboard for run history, products, statuses, incidents,
-    coverage, and Gold aggregates.
+    coverage, Gold aggregates, and quarantined records.
 -   SQL Gold views over normalized rows and the target-hour status
     ledger: hourly coverage, per-keyword unit mix and price spread,
     organic-vs-sponsored rank per product, and quarantine counts.
 -   GitHub Actions CI runs the test suite and a mock smoke run on every
     push.
+-   Property-based tests (Hypothesis) for the value parsers, product key,
+    deduplication and rank assignment; see
+    [`docs/property_tests.md`](docs/property_tests.md).
+-   A one-page design note for scaling to 20,000 targets:
+    [`docs/scaling_note.md`](docs/scaling_note.md).
 
 ## Requirements
 
@@ -87,8 +92,6 @@ python -m src.main --run-once
 python -m src.main --demo
 python -m streamlit run src/dashboard/app.py
 ```
-
-Keep real credentials in an untracked `.env`; do not commit secrets.
 
 ## Useful commands
 
@@ -250,19 +253,36 @@ Run:
 python -m pytest -q
 ```
 
-The suite now has 94 tests. A clean-clone run made before the quarantine
-layer was added (86 tests) completed with **86 passed in 375.12
-seconds**; on a fast machine the suite takes a few seconds, so that
-duration was not investigated further. GitHub Actions runs `pytest` and
-a mock smoke run on every push. The mock demo also completed
-successfully: 50 targets per slot, 48
-`success`, 2 `zero_result`, 1,616 rows written/upserted per slot,
-missing-slot detection, repeated-alert aggregation, late backfill, 100%
-completeness, and incident resolution. These are mock-environment
-results, not live AJIO observations.
+The suite has 113 tests, 19 of them property-based (see
+[`docs/property_tests.md`](docs/property_tests.md)). GitHub Actions runs
+`pytest` and a mock smoke run on every push.
+
+I verified the committed code in a clean clone on Windows: a fresh
+`git clone`, a new virtual environment, dependencies installed from
+`requirements.txt`, then the full suite and the demo.
+
+-   `python -m pytest -q`: **113 passed in 518.33 seconds**. Earlier
+    clean-clone runs took 375.12 seconds (86 tests) and 470.30 seconds
+    (94 tests). I have not investigated why the suite is slow on this
+    machine.
+-   `python -m src.main --demo` completed successfully: 50 targets per
+    slot, 48 `success`, 2 `zero_result`, 1,616 rows written/upserted per
+    slot, missing-slot detection, repeated-alert aggregation, late
+    backfill, 100% completeness, and incident resolution.
+-   I exported the dashboard coverage grid to CSV afterwards. It lists the
+    50 configured keywords across three scheduled-hour columns. `asdfgh
+    qwerty zzzz` and `zxqvbn shirt` are `zero_result` in all three hours
+    and the other 48 keywords are `success`, so every hour has 48 + 2 = 50
+    targets complete.
+
+These are mock-environment results, not live AJIO observations. To run
+only the tests that do not write files (35 tests, a few seconds):
+
+``` bash
+python -m pytest -q tests/test_properties.py tests/test_parsing.py tests/test_ranking.py tests/test_jsonld.py
+```
 
 See [`docs/curveballs.md`](docs/curveballs.md),
 [`KNOWN_GAPS.md`](KNOWN_GAPS.md), and
-[`docs/evidence_checklist.md`](docs/evidence_checklist.md). Capture your
-own screenshots in `screenshots/`; do not include credentials or private
-information.
+[`docs/evidence_checklist.md`](docs/evidence_checklist.md). The
+screenshots from my own runs are in `screenshots/`.
