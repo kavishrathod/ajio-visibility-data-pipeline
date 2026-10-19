@@ -2,65 +2,69 @@
 
 ## 1. Identifying product types on AJIO
 
-**Choice:** I used the placement labels available in my mock pages to distinguish Sponsored Brand (SB), Sponsored Product (SP), and Organic results. I store the product type separately from the rank so that sponsored and organic placements are not treated as the same type of result. I also inspected the page source and embedded JSON-LD during source research, but JSON-LD alone was not sufficient evidence to identify every placement type.
+**Choice:** I use placement labels in mock pages to distinguish Sponsored Brand (SB), Sponsored Product (SP), and Organic results. Product type is stored separately from rank because position alone does not prove that a result is sponsored. Brands come from an explicit field, not title inference. The pipeline stores a cleaned `brand` and normalized `brand_key`; aliases such as "U.S. Polo Assn." and "US Polo Assn." are maintained in `config/brand_aliases.json`. Missing brands remain NULL and are excluded from brand comparisons.
 
-Brands follow the same rule. The live page shows a brand label under each product, so the mock cards carry an explicit brand field, and the pipeline stores a cleaned `brand` and a normalized `brand_key`. I never infer a brand from the product title, because title prefixes do not follow one rule; a card without a brand label has a NULL brand and is left out of the brand comparison, and the share of units with a brand is reported. Variants that differ only in case, spacing or Unicode share a key, and any other equivalence (for example "U.S. Polo Assn." and "US Polo Assn") is a hand-curated entry in `config/brand_aliases.json`.
+**Alternative rejected:** Inferring sponsorship from rank or product position, because it can misclassify organic results.
 
-**Alternative rejected:** I rejected inferring product type from rank or product position alone because an item appearing first does not prove that it is sponsored.
-
-**Limitation:** My automated pipeline uses labelled mock data. I did not verify the live AJIO rendered DOM or establish that its actual sponsored-placement markers follow the same contract. I therefore do not claim that the pipeline is collecting verified live AJIO placements.
+**Reason and limitation:** Explicit labels reduce ambiguity. The automated pipeline uses mock data; live AJIO placement markers have not been verified.
 
 ## 2. Idempotency and deduplication
 
-**Choice:** I use a stable product identity, based on the available product ID or URL, together with the scheduled hour, keyword, and placement information to identify a placement. Repeated placements are detected, while different placement types for the same product can remain distinct. Database upserts and duplicate checks allow the same scheduled hour to be processed again without simply appending another copy of every row. Duplicates that are dropped are not lost: they are written to the quarantine table with a reason (`duplicate_placement` on the same page, `cross_page_duplicate` across pages).
+**Choice:** A placement is identified using the available product ID or URL, scheduled hour, keyword, and placement information. Upserts and duplicate checks allow a scheduled hour to be rerun without duplicating normalized placements. Rejected duplicates are recorded in quarantine as `duplicate_placement` or `cross_page_duplicate`. Raw evidence and run history are retained separately.
 
-**Alternative rejected:** I rejected inserting every collected row as a new record because retries, backfills, and rerunning an hour would inflate counts and corrupt the results.
+Duplicate spikes are flagged when an hour has at least 10 duplicates, duplicates represent at least 2% of units, and the rate is at least five times the rolling median of previous complete hours, once three are available. These thresholds are defaults, not tuned on real AJIO data. See `docs/duplicate_spike.md`.
 
-**What happens on a rerun:** The pipeline can process the same hour again without duplicating the same placements. Raw collection evidence and run history are retained separately from the normalized results, so a rerun does not mean that all evidence of the earlier attempt is discarded.
+**Alternative rejected:** Appending every row on each run, because retries and backfills would inflate counts.
 
-**Duplicate spikes:** each target-hour records how many repeated placements it dropped (`duplicate_count`). An hour is a spike when it has at least 10 duplicates, they are at least 2% of the units seen, and that rate is at least 5 times the rolling median of the previous complete hours (used once three exist). I chose a count floor and a rate floor because a few repeats are normal and a tiny hour could otherwise reach a high rate; I added the baseline so a stable duplicate rate does not alert every hour. The defaults are my own and have not been tuned on real data. A spike opens an incident like the other triggers (aggregated, cooldown, one recovery); details are in `docs/duplicate_spike.md`.
-
-**Limitation:** Deduplication depends on having a usable product identity. If a product has neither a reliable ID nor a usable URL, identity matching becomes less reliable.
+**Reason:** Idempotency protects hourly comparisons and keeps rejected records auditable. Matching is less reliable when neither a usable product ID nor URL exists.
 
 ## 3. Genuine zero results versus a failed slot
 
-**Choice:** I distinguish `zero_result` from collection and parsing failures. A slot is considered a genuine zero-result slot only when the expected no-results indicator is present. A page that returns successfully but contains no usable product information is not automatically treated as empty; it can be marked `parse_failed`. Blocking, request failures, and partial pagination have separate outcomes. If page 1 parses and a later page fails, either because it cannot be parsed or because its fetch retries are exhausted, the slot is `partial`: the page-1 rows are kept and the slot does not count as complete. While auditing the statuses I found that an exhausted fetch on page 2 had been recorded as `failed` even though page 1 was saved, and I changed it. Pages that failed to parse or were blocked are also kept in quarantine.
+**Choice:** A slot is `zero_result` only when an explicit no-results indicator is present. An empty or unusable page is not automatically considered empty; parsing failures, blocking, request failures, and partial pagination have separate outcomes. If page 1 succeeds but a later page fails, page-1 rows are retained and the slot is marked `partial`, not complete. Rejected pages can be retained in quarantine.
 
-**Alternative rejected:** I rejected treating an empty product list as proof that no products exist because an incomplete page, changed layout, or blocked request could produce the same symptom.
+**Alternative rejected:** Treating an empty product list as proof that no products exist.
 
-**Why it matters:** This distinction prevents a collection failure from appearing as a legitimate drop in product visibility. I retain raw evidence where available so that parsing or loading issues can be investigated and, where supported, replayed.
-
-**Limitation:** The no-results and parsing rules are tested against mock pages and fixtures. Live AJIO page behaviour has not been verified.
+**Reason:** A blocked request or changed page layout must not appear as a genuine drop in visibility. These rules are tested against mock pages and fixtures; live AJIO behaviour remains unverified.
 
 ## 4. Assigning rows to an hour
 
-**Choice:** I assign rows to the **scheduled collection hour**, rather than the exact time when a request finishes. Slots are defined using IST, while the stored scheduled-hour timestamp is represented as a UTC instant. This keeps results from the same scheduled slot together even if a request finishes late or the slot is backfilled later.
+**Choice:** Rows belong to the scheduled collection hour, not the time a request finishes. Slots use IST, and scheduled-hour timestamps are stored as UTC instants. Late requests and backfills therefore remain associated with the intended slot.
 
-**Alternative rejected:** I rejected assigning each row to its individual collection timestamp because slow requests and retries could spread one scheduled collection across different hourly buckets, making coverage and comparisons inconsistent.
+**Alternative rejected:** Assigning rows to individual request-completion times, which could scatter one scheduled collection across different hourly buckets.
 
-**Limitation:** The current implementation uses a fixed IST offset in its time utility rather than a fully configurable timezone implementation. The scheduling and timestamp conversion should be reviewed if the deployment timezone or scheduling requirements change.
+**Reason:** Consistent slot assignment supports reliable coverage and hourly comparisons. The current time utility uses a fixed IST offset rather than a configurable timezone implementation.
 
 ## 5. Curveballs: fully handled, partially handled, or skipped
 
-**Choice:** I prioritised failure scenarios that could silently corrupt the data or make monitoring misleading.
+**Choice:** I prioritised failure scenarios that could silently corrupt the data or make monitoring misleading. These classifications describe tested mock/fixture behaviour, not verification against live AJIO.
 
-- **Handled in the mock/tested implementation:** Re-running an hour without duplicating normalized placements; distinguishing explicit zero results from failures; detecting missing scheduled slots; aggregating repeated alerts and recording recovery; and quarantining rejected records with reasons rather than silently treating them as valid data.
-- **Checked with generated inputs:** property-based tests for price, count and rating parsing, the product key, deduplication and rank continuity across pages. They found two parser bugs that my example-based tests had missed: an out-of-range rating such as `7.5` was read as `5.0`, and a URL whose title slug was `p` produced the wrong product key. I fixed both.
-- **Partially handled:** Unusable pages, malformed values, pagination overlap, later-page failures, throttling/blocking, and database recovery have handling and test coverage, but the tests use fixtures or mocked behaviour rather than live AJIO requests. Pagination checks cannot detect a product missing from every returned page when there is no independent expected total.
-- **Not implemented or not fully verified:** Live AJIO collection, production-scale scheduling, a complete quarantine reprocessing workflow, quarantine retention/purge policies, and high-volume quarantine alerts. I did not attempt to bypass source restrictions to test live collection.
+- **I-1 — Silent layout change: Full (fixtures).** Parser failures are distinguished from genuine zero results.
+- **I-2 — Genuine zero results: Full.** An explicit no-results indicator distinguishes empty results from parsing failures.
+- **I-3 — Mixed placement types: Full.** Sponsored and organic placements remain distinct, including when the same product appears in both.
+- **I-4 — Pagination drift: Partial.** Cross-page duplicates are detected and quarantined, but missing products cannot be identified without an independent expected total.
+- **I-5 — Messy values: Full (tested inputs).** Invalid values are handled. Property-based tests exposed rating-parsing and product-key bugs that were fixed.
+- **I-6 — Same product twice: Full.** Duplicate placements are detected while different placement types remain distinct.
+- **I-7 — Throttled and blocked: Full (mock).** Simulated throttling and blocking are handled; live AJIO behaviour is unverified.
+- **I-8 — Hour boundary: Full (IST slots).** Rows use their scheduled collection hour.
+- **I-9 — Overlapping runs: Full.** The tested global lock rejects overlapping runs.
+- **I-10 — Late backfill: Full.** The tested backfill flow processes a previously missing slot.
+- **I-11 — Database down mid-run: Full (tested scenario).** The documented mid-run failure behaviour is tested, not every production failure mode.
+- **I-12 — Alert storm: Full.** Failures are aggregated, with incident deduplication, cooldown, and recovery behaviour tested.
 
-**Alternative rejected:** I rejected treating every curveball as successfully solved just because a test run passed. A passing fixture test demonstrates the tested behaviour, not that the same behaviour has been verified against a live source or production infrastructure.
+**Not implemented or not fully verified:** Live AJIO collection, production-scale scheduling, complete quarantine reprocessing, quarantine retention/purge policies, and high-volume quarantine alerts. I did not bypass source restrictions to test live collection.
 
-**Why:** I wanted failures to remain visible and documented, rather than hide uncertainty behind a success status.
+**Alternative rejected:** Claiming every curveball was solved because tests passed.
+
+**Reason:** Fixture tests demonstrate only the behaviour they exercise. Clear limits keep failures and unverified assumptions visible.
 
 ## 6. What would break first at 100× the number of targets?
 
-**Choice:** I kept the current implementation local-first, using SQLite, a single-host overlap lock, raw snapshots, and a scheduler that runs on the same environment. This keeps the assessment reproducible and avoids introducing infrastructure that the current workload does not require.
+**Choice:** I kept the project local-first, using SQLite, a single-host overlap lock, raw snapshots, and a local scheduler. This keeps the assessment reproducible without unnecessary infrastructure.
 
-**Alternative rejected:** I rejected adding distributed infrastructure solely to make the project look production-scale before validating the core collection, data-quality, and recovery behaviour.
+**Alternative rejected:** Adding distributed infrastructure before validating the core collection, data-quality, and recovery behaviour.
 
-**What would break first:** At 100× the target count, collection time and request volume would increase first. A single process could struggle to finish within the hourly window, while SQLite writes, the single-host lock, and dashboard queries could become bottlenecks. Increasing concurrency without coordinated rate limits could also create excessive request traffic or make overlapping runs harder to control.
+**Reason:** Collection time and request volume would likely become the first constraints. At 100× scale, a single process might miss hourly deadlines; SQLite writes, dashboard queries, and the single-host lock could also become bottlenecks. Uncontrolled concurrency could exceed acceptable request rates.
 
-**Worked example:** `docs/scaling_note.md` works through 20,000 targets. At two pages each that is about 40,000 pages an hour, roughly 11 requests per second, so the rate the source would accept is the first limit, before compute. The same note covers sharding, hour partitioning, per-task leases and a rough monthly cost (order-of-magnitude estimates from stated assumptions). The quarantine table would also need a retention policy, and the Gold views would need to be materialised per hour.
+**Worked example:** `docs/scaling_note.md` estimates 20,000 targets at two pages each as 40,000 pages per hour, or about 11 requests per second. Source rate limits may constrain throughput before compute does. These are estimates based on stated assumptions, not measured production results.
 
-**Next step:** I would measure runtime and database load, then move scheduling and work distribution to a durable queue, use bounded workers with coordinated rate limits, and consider a database designed for concurrent workloads. I would partition raw data by scheduled hour and make monitoring track queue lag, failed targets, and slot completeness. I would scale based on measured bottlenecks rather than simply increasing concurrency.
+**Next step:** Measure runtime and database load, then introduce durable work distribution, bounded workers, coordinated rate limits, and a database suited to concurrent workloads if measurements justify them. Partition raw data by scheduled hour and monitor queue lag, failed targets, and slot completeness.
